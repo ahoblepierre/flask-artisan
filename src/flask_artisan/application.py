@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, current_app, has_app_context
 
 from flask_artisan.config import Repository
 from flask_artisan.container import Container
@@ -84,6 +84,11 @@ class Application(Flask, Container):
 
     @classmethod
     def get_instance(cls) -> Application:
+        # Pendant une requête, l'app courante gagne (plusieurs apps dans un même processus).
+        if has_app_context():
+            current = current_app._get_current_object()
+            if isinstance(current, Application):
+                return current
         if Application._current is None:
             raise RuntimeError("Aucune application flask-artisan n'a été créée.")
         return Application._current

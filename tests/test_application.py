@@ -116,3 +116,14 @@ def test_application_does_not_override_flask():
 @pytest.mark.parametrize("raw", ["'0'", "'false'", "'no'", "''"])
 def test_debug_falsy_strings(make_project, raw):
     assert Application(make_project(debug=raw)).config["DEBUG"] is False
+
+
+def test_get_instance_prefers_current_app(make_project, tmp_path):
+    import shutil
+
+    base = make_project()
+    a = Application(base)
+    b = Application(shutil.copytree(base, tmp_path / "other"))
+    with a.app_context():
+        assert Application.get_instance() is a
+    assert Application.get_instance() is b
