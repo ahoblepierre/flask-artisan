@@ -1,5 +1,6 @@
 import threading
 from contextlib import contextmanager
+from pathlib import Path
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import (
@@ -78,6 +79,9 @@ class DatabaseManager:
         if not conn:
             raise DatabaseError(f"Connexion '{name}' absente de config/database.py.")
         url = connection_url(conn, self._app.base_path())
+        if url.startswith("sqlite:///"):
+            # SQLite crée le fichier, pas son dossier.
+            Path(url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
         options = {}
         if url == "sqlite://":
             # :memory: : une seule connexion partagée, sinon chaque connexion a sa propre base.
