@@ -9,7 +9,7 @@ description = "Les conventions de Laravel pour Flask : conteneur, providers, con
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
-dependencies = ["flask>=3.0", "python-dotenv>=1.0"]
+dependencies = ["flask>=3.0", "python-dotenv>=1.0", "sqlalchemy>=2.0", "alembic>=1.13"]
 classifiers = [
     "Framework :: Flask",
     "Programming Language :: Python :: 3",
@@ -18,6 +18,8 @@ classifiers = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+pgsql = ["psycopg[binary]>=3.1"]
+mysql = ["PyMySQL>=1.1"]
 
 [project.scripts]
 flask-artisan = "flask_artisan.cli:main"
@@ -27,10 +29,17 @@ Homepage = "https://github.com/ahoblepierre/flask-artisan"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["flask_artisan"]
+include = ["flask_artisan", "flask_artisan.database"]
 
 [tool.setuptools.package-data]
-flask_artisan = ["skeleton/**/*", "skeleton/.env.example", "skeleton/.gitignore"]
+flask_artisan = [
+    "skeleton/**/*",
+    "skeleton/.env.example",
+    "skeleton/.gitignore",
+    "skeleton/database/.gitignore",
+    "skeleton/database/migrations/.gitkeep",
+]
+"flask_artisan.database" = ["alembic_env/*"]
 
 [tool.ruff]
 line-length = 100
@@ -40,7 +49,9 @@ extend-exclude = ["*.md"]  # ruff formate aussi les blocs de code Markdown : doc
 [tool.ruff.lint.per-file-ignores]
 # Kernels HTTP : listes et dicts en attributs de classe, par convention (comme Laravel).
 "**/kernel.py" = ["RUF012"]
+"**/models/*.py" = ["RUF012"]  # fillable, hidden : listes en attributs de classe (Eloquent)
 "tests/*" = ["RUF012"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = ["error::sqlalchemy.exc.SAWarning"]

@@ -27,3 +27,7 @@ class Config(Facade):
 
 class Route(Facade):
     accessor = "router"
+
+
+class DB(Facade):
+    accessor = "db"

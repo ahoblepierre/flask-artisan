@@ -213,7 +213,7 @@ class Router:
             def run(i, req):
                 if i == len(stack):
                     fn = getattr(app.make(cls), target) if cls else target
-                    return app.make_response(app.call(fn, **values))
+                    return app.make_response(_jsonable(app, app.call(fn, **values)))
                 middleware, params = stack[i]
                 # make_response : un middleware peut renvoyer un dict ou un tuple comme une vue.
                 return app.make_response(
@@ -223,6 +223,15 @@ class Router:
             return run(0, request._get_current_object())
 
         return view
+
+
+def _jsonable(app, rv: Any) -> Any:
+    """Un objet sérialisable (ex. un modèle, avec `to_dict`) devient une réponse JSON."""
+    body = rv[0] if isinstance(rv, tuple) else rv
+    if not hasattr(body, "to_dict") or isinstance(body, (dict, list, str, bytes)):
+        return rv
+    response = app.json.response(body)
+    return (response, *rv[1:]) if isinstance(rv, tuple) else response
 
 
 def _join(*parts: str) -> str:

@@ -105,3 +105,19 @@ def test_generated_home_is_named_route(project):
     out = run(project, "-c", code)
     assert "URL=/" in out.stdout, out.stderr
     assert "VIEW=Router." in out.stdout, out.stdout  # déclarée via Route, pas @app.route
+
+
+def test_generated_project_has_database_files(project):
+    for path in ("config/database.py", "app/models/user.py", "database/migrations/.gitkeep"):
+        assert (project / path).exists(), path
+
+
+def test_generated_project_migrates(project):
+    import sqlite3
+
+    for args in (("make:migration", "create users"), ("migrate",)):
+        result = run(project, "-m", "flask", *args)
+        assert result.returncode == 0, result.stdout + result.stderr
+    with sqlite3.connect(project / "database" / "database.sqlite") as db:
+        tables = {r[0] for r in db.execute("select name from sqlite_master where type='table'")}
+    assert "users" in tables
