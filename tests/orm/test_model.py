@@ -182,3 +182,26 @@ def test_serializable_after_session_closed(db_app):
     DB.remove()
     with app.app_context():
         assert app.json.dumps(user)
+
+
+class MUnique(Model):
+    email: Mapped[str] = column(unique=True)
+
+
+def test_session_usable_after_failed_save(db_app):
+    from sqlalchemy.exc import IntegrityError
+
+    db_app()
+    MUnique.create(email="a")
+    with pytest.raises(IntegrityError):
+        MUnique.create(email="a")
+    assert MUnique.count() == 1
+
+
+def test_timestamps_aware_after_reload(db_app):
+    db_app()
+    user = MUser.create(name="a")
+    DB.remove()
+    again = MUser.find(user.id)
+    assert again.created_at.tzinfo is not None
+    assert again.created_at == user.created_at

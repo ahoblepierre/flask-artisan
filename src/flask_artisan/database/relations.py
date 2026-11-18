@@ -42,7 +42,9 @@ def build(owner: type, attr: str, rel: Relation, snake) -> object:
         fk = f"{rel.model}.{rel.foreign_key or snake(owner.__name__) + '_id'}"
         prop = relationship(rel.model, foreign_keys=fk, uselist=rel.kind == "has_many")
     else:
-        return relationship(rel.model, secondary=lambda: _pivot(owner, rel, snake))
+        prop = relationship(rel.model, secondary=lambda: _pivot(owner, rel, snake))
+        pair = sorted([snake(owner.__name__), snake(rel.model)])
+        fk = rel.table or "_".join(pair)  # clé de rapprochement : la table pivot
     _pending.append((prop, rel.kind, owner.__name__, rel.model, fk))
     return prop
 
@@ -57,15 +59,24 @@ def _link_inverses() -> None:
 
     Sans ce lien, SQLAlchemy avertit que les deux relations écrivent la même colonne.
     """
-    parents = [p for p in _pending if p[1] in ("has_one", "has_many")]
-    children = [p for p in _pending if p[1] == "belongs_to"]
-    for parent in parents:
-        matches = [c for c in children if (c[2], c[3], c[4]) == (parent[3], parent[2], parent[4])]
-        if len(matches) == 1 and parent[0].back_populates is None:
-            child = matches[0]
-            parent[0].back_populates = child[0].key
-            child[0].back_populates = parent[0].key
-    _pending.clear()
+    pending = [p for p in _pending if not p[0].parent.configured]
+    linked = set()
+    for one in pending:
+        if one[1] == "belongs_to":
+            continue
+        inverse = "belongs_to_many" if one[1] == "belongs_to_many" else "belongs_to"
+        matches = [
+            o
+            for o in pending
+            if o[1] == inverse and o is not one and (o[2], o[3], o[4]) == (one[3], one[2], one[4])
+        ]
+        if len(matches) == 1 and one[0].back_populates is None:
+            other = matches[0]
+            one[0].back_populates = other[0].key
+            other[0].back_populates = one[0].key
+            linked |= {id(one), id(other)}
+    # Une relation dont l'inverse n'est pas encore déclaré reste en attente.
+    _pending[:] = [p for p in pending if id(p) not in linked]
 
 
 def _pivot(owner: type, rel: Relation, snake) -> Table:

@@ -3,7 +3,7 @@ import re
 from datetime import date, datetime, time, timezone
 from typing import Any, ClassVar
 
-from sqlalchemy import DateTime, Integer, inspect, select
+from sqlalchemy import DateTime, Integer, MetaData, event, inspect, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedColumn, mapped_column
 
 from flask_artisan.database import relations
@@ -58,6 +58,17 @@ class MassAssignmentError(Exception):
 
 class Model(DeclarativeBase):
     """Modèle façon Eloquent : `User.create(...)`, `user.save()`, `User.find(1)`."""
+
+    # Contraintes nommées : indispensable au mode batch de SQLite et aux downgrades.
+    metadata = MetaData(
+        naming_convention={
+            "ix": "ix_%(column_0_label)s",
+            "uq": "uq_%(table_name)s_%(column_0_name)s",
+            "ck": "ck_%(table_name)s_%(constraint_name)s",
+            "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+            "pk": "pk_%(table_name)s",
+        }
+    )
 
     fillable: ClassVar[list | None] = None
     hidden: ClassVar[list] = []
@@ -270,8 +281,25 @@ def _db():
 def _commit(db) -> None:
     if db.in_transaction():
         db.session.flush()
-    else:
+        return
+    try:
         db.session.commit()
+    except BaseException:
+        db.session.rollback()  # sinon la session reste inutilisable (PendingRollbackError)
+        raise
+
+
+TIMESTAMPS = ("created_at", "updated_at", "deleted_at")
+
+
+@event.listens_for(Model, "load", propagate=True)
+def _aware_timestamps(target, context) -> None:
+    """SQLite relit les dates sans fuseau : on les remet en UTC, comme à la création."""
+    values = inspect(target).dict
+    for name in TIMESTAMPS:
+        value = values.get(name)
+        if isinstance(value, datetime) and value.tzinfo is None:
+            values[name] = value.replace(tzinfo=timezone.utc)
 
 
 def _plain(value: Any) -> Any:

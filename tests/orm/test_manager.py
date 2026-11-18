@@ -1,4 +1,7 @@
+import sys
+
 import pytest
+from conftest import project_modules
 from sqlalchemy import text
 
 from flask_artisan import DB, Route, ServiceProvider
@@ -78,3 +81,34 @@ def test_two_apps_two_databases(db_app):
         create_table()
     with b.app_context():
         assert not DB.engine.dialect.has_table(DB.session.connection(), "t")
+
+
+AUTHOR = """from flask_artisan.database import Mapped, Model, has_many
+
+
+class BootAuthor(Model):
+    name: Mapped[str]
+    books = has_many("BootBook")
+"""
+
+BOOK = """from flask_artisan.database import Mapped, Model, foreign_id
+
+
+class BootBook(Model):
+    title: Mapped[str]
+    boot_author_id: Mapped[int] = foreign_id("boot_authors")
+"""
+
+
+def test_models_imported_at_boot(db_app, tmp_path):
+    models = tmp_path / "app" / "models"
+    models.mkdir(parents=True)
+    (tmp_path / "app" / "__init__.py").write_text("")
+    (models / "__init__.py").write_text("")
+    (models / "boot_author.py").write_text(AUTHOR)
+    (models / "boot_book.py").write_text(BOOK)
+    with project_modules(tmp_path):
+        db_app()
+        assert "app.models.boot_book" in sys.modules
+        author = sys.modules["app.models.boot_author"].BootAuthor
+        assert author.with_("books").count() == 0

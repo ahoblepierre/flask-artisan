@@ -157,7 +157,7 @@ class Post(Model):
 User.create(name="Ana", email="ana@x.io", password=hashed)
 User.find(1)
 User.find_or_fail(1)                      # 404 pendant une requête
-User.where("age", ">", 18).or_where("name", "like", "A%").order_by("name").get()
+User.where("name", "like", "A%").or_where("email", "like", "%@x.io").order_by("name").get()
 User.where_in("id", [1, 2]).count()
 User.with_("posts.tags").latest().first() # chargement immédiat des relations
 user.update(name="Bob")
@@ -179,6 +179,8 @@ with DB.transaction():      # validé à la sortie, annulé sur exception
 ```
 
 `DB.session` donne la session SQLAlchemy, pour tout ce que l'API ne couvre pas.
+
+La session est fermée automatiquement à la fin de chaque requête. Un script ou une commande qui tourne longtemps doit appeler `DB.remove()` quand il a fini, sinon sa connexion reste ouverte.
 
 ### Migrations
 

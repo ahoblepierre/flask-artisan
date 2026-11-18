@@ -134,3 +134,23 @@ def test_inverse_relations_linked_without_warning(data, recwarn):
     post = RPost(title="new")
     post.r_user = ana
     assert post in ana.posts  # synchronisé par back_populates
+
+
+class RStudent(Model):
+    name: Mapped[str]
+    courses = belongs_to_many("RCourse")
+
+
+class RCourse(Model):
+    name: Mapped[str]
+    students = belongs_to_many("RStudent")
+
+
+def test_belongs_to_many_both_sides_linked(db_app, recwarn):
+    db_app()
+    student, course = RStudent(name="s"), RCourse(name="c")
+    student.courses.append(course)
+    assert student in course.students
+    student.save()
+    DB.remove()
+    assert [s.name for s in RCourse.find(course.id).students] == ["s"]

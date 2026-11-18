@@ -1,9 +1,12 @@
 import re
 
 import pytest
+from conftest import project_modules
 from sqlalchemy import Column, String, inspect
 
 from flask_artisan import DB
+
+CACHE: dict = {}  # app.models.mig_note gardé entre les tests
 
 MODEL = """from flask_artisan.database import Mapped, Model
 
@@ -14,18 +17,16 @@ class MigNote(Model):
 
 
 @pytest.fixture
-def project(db_app, tmp_path, monkeypatch):
+def project(db_app, tmp_path):
     root = tmp_path
     (root / "app" / "models").mkdir(parents=True)
     (root / "app" / "__init__.py").write_text("")
     (root / "app" / "models" / "__init__.py").write_text("")
     (root / "app" / "models" / "mig_note.py").write_text(MODEL)
-    monkeypatch.syspath_prepend(str(root))
-    # Le module app.models.mig_note reste en cache d'un test à l'autre : MigNote n'est
-    # déclaré qu'une fois (registre SQLAlchemy global).
-    app = db_app(database="database/test.sqlite")
-    app.make("db").drop_all()  # base vide : les tables viennent des migrations
-    return app
+    with project_modules(root, CACHE):
+        app = db_app(database="database/test.sqlite")
+        app.make("db").drop_all()  # base vide : les tables viennent des migrations
+        yield app
 
 
 def run(app, *args):
@@ -88,3 +89,29 @@ def test_sqlite_alter_in_batch(project):
         assert "extra" not in [c["name"] for c in inspect(DB.engine).get_columns("mig_notes")]
     finally:
         MigNote.__table__._columns.remove(extra)
+
+
+def test_sqlite_add_foreign_key_and_unique_in_batch(project):
+    from app.models.mig_note import MigNote
+    from sqlalchemy import ForeignKey, Integer
+
+    run(project, "make:migration", "create notes")
+    run(project, "migrate")
+    table = MigNote.__table__
+    saved = (set(table.constraints), set(table.foreign_keys), set(table.indexes))
+    added = [
+        Column("parent_id", Integer, ForeignKey("mig_notes.id"), nullable=True),
+        Column("code", String, unique=True, nullable=True),
+    ]
+    for col in added:
+        table.append_column(col)
+    try:
+        run(project, "make:migration", "add parent and code")
+        run(project, "migrate")
+        assert "parent_id" in [c["name"] for c in inspect(DB.engine).get_columns("mig_notes")]
+        run(project, "migrate:rollback")
+        assert "parent_id" not in [c["name"] for c in inspect(DB.engine).get_columns("mig_notes")]
+    finally:
+        for col in added:
+            table._columns.remove(col)
+        table.constraints, table.foreign_keys, table.indexes = saved

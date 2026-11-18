@@ -1,3 +1,6 @@
+import sys
+from contextlib import contextmanager
+
 import pytest
 
 from flask_artisan.application import Application
@@ -81,3 +84,30 @@ def db_app(make_project):
         return app
 
     return _make
+
+
+@contextmanager
+def project_modules(root, cache: dict | None = None):
+    """Isole le paquet `app` d'un projet de test dans sys.modules.
+
+    `cache` garde ses modules d'un test à l'autre : un modèle n'est déclaré qu'une fois
+    (registre SQLAlchemy global).
+    """
+
+    def ours():
+        return {k: v for k, v in sys.modules.items() if k == "app" or k.startswith("app.")}
+
+    saved = ours()
+    for name in saved:
+        del sys.modules[name]
+    sys.modules.update(cache or {})
+    sys.path.insert(0, str(root))
+    try:
+        yield
+    finally:
+        sys.path.remove(str(root))
+        if cache is not None:
+            cache.update(ours())
+        for name in ours():
+            del sys.modules[name]
+        sys.modules.update(saved)
