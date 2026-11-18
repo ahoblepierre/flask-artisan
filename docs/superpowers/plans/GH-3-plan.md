@@ -50,7 +50,7 @@
 
 ---
 
-### Tâche 1 : `Container.call`
+### Task 1: `Container.call`
 
 **Fichiers :**
 - Modifier : `src/flask_artisan/container.py`
@@ -81,7 +81,7 @@
 - [ ] **Étape 4 :** `.venv/bin/pytest -q`. Attendu : tout vert, y compris `test_no_flask_attribute_shadowed` (Flask n'a pas d'attribut `call`).
 - [ ] **Étape 5 :** commit `feat: app.call() injecte les dépendances dans une fonction (#3)`.
 
-### Tâche 2 : `get_instance` préfère `current_app`
+### Task 2: `get_instance` préfère `current_app`
 
 **Fichiers :**
 - Modifier : `src/flask_artisan/application.py`
@@ -100,7 +100,7 @@
 - [ ] **Étape 4 :** `.venv/bin/pytest -q`. Attendu : vert.
 - [ ] **Étape 5 :** commit `feat: les façades visent l'app de la requête courante (#3)`.
 
-### Tâche 3 : `Router`, verbes, controllers et enregistrement dans Flask
+### Task 3: `Router`, verbes, controllers et enregistrement dans Flask
 
 **Fichiers :**
 - Créer : `src/flask_artisan/routing.py`
@@ -166,7 +166,7 @@
 - [ ] **Étape 4 :** `.venv/bin/pytest -q`. Attendu : vert, y compris les deux tests « aucun attribut Flask masqué ».
 - [ ] **Étape 5 :** commit `feat: Router, façade Route et controllers injectés (#3)`.
 
-### Tâche 4 : groupes et `resource`
+### Task 4: groupes et `resource`
 
 **Fichiers :**
 - Modifier : `src/flask_artisan/routing.py`
@@ -195,7 +195,7 @@
 - [ ] **Étape 4 :** `.venv/bin/pytest -q`. Attendu : vert.
 - [ ] **Étape 5 :** commit `feat: groupes de routes et Route.resource (#3)`.
 
-### Tâche 5 : middlewares, kernel et pipeline
+### Task 5: middlewares, kernel et pipeline
 
 **Fichiers :**
 - Créer : `src/flask_artisan/middleware.py`
@@ -239,7 +239,7 @@
 - [ ] **Étape 4 :** `.venv/bin/pytest -q`. Attendu : vert.
 - [ ] **Étape 5 :** commit `feat: middlewares en oignon et kernel HTTP (#3)`.
 
-### Tâche 6 : `RouteServiceProvider` et chargement des fichiers
+### Task 6: `RouteServiceProvider` et chargement des fichiers
 
 **Fichiers :**
 - Créer : `src/flask_artisan/route_provider.py`
@@ -268,7 +268,7 @@
 - [ ] **Étape 4 :** `.venv/bin/pytest -q`. Attendu : vert.
 - [ ] **Étape 5 :** commit `feat: RouteServiceProvider charge routes/web.py et routes/api.py (#3)`.
 
-### Tâche 7 : squelette, documentation et bout en bout
+### Task 7: squelette, documentation et bout en bout
 
 **Fichiers :**
 - Créer dans `src/flask_artisan/skeleton/` :
