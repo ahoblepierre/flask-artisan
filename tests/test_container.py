@@ -174,3 +174,60 @@ def test_closure_cycle_raises():
     c.bind("b", lambda container: container.make("a"))
     with pytest.raises(BindingResolutionError, match="circulaire"):
         c.make("a")
+
+
+# --- call() ---
+
+
+def test_call_injects_by_type():
+    def f(svc: A):
+        return svc
+
+    assert isinstance(Container().call(f), A)
+
+
+def test_call_explicit_params_win():
+    def f(id: int, svc: A):
+        return id, svc
+
+    assert Container().call(f, id="5")[0] == "5"
+
+
+def test_call_ignores_unknown_params():
+    def f():
+        return 1
+
+    assert Container().call(f, team_id="3") == 1
+
+
+def test_call_passes_unknown_to_kwargs():
+    def f(**kw):
+        return kw
+
+    assert Container().call(f, a="1") == {"a": "1"}
+
+
+def test_call_uses_default_and_binding_order():
+    c = Container()
+    a = c.instance(A, A())
+
+    def f(svc: A, path: Path = Path("x")):
+        return svc, path
+
+    assert c.call(f) == (a, Path("x"))
+
+
+def test_call_bound_method():
+    class Obj:
+        def m(self, svc: A):
+            return svc
+
+    assert isinstance(Container().call(Obj().m), A)
+
+
+def test_call_unresolvable_names_function():
+    def f(x):
+        return x
+
+    with pytest.raises(BindingResolutionError, match="'x'.*f"):
+        Container().call(f)

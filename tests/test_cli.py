@@ -89,3 +89,19 @@ def test_flask_run_path_debug(project):
 def test_generated_project_tests_pass(project):
     result = run(project, "-m", "pytest", "-q", "-p", "no:cacheprovider")
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_generated_project_has_routes(project):
+    for path in ("routes/web.py", "routes/api.py", "app/http/kernel.py"):
+        assert (project / path).exists(), path
+
+
+def test_generated_home_is_named_route(project):
+    code = (
+        "from flask import url_for\nfrom wsgi import app\n"
+        "with app.test_request_context():\n    print('URL=' + url_for('home'))\n"
+        "print('VIEW=' + app.view_functions['home'].__qualname__)\n"
+    )
+    out = run(project, "-c", code)
+    assert "URL=/" in out.stdout, out.stderr
+    assert "VIEW=Router." in out.stdout, out.stdout  # déclarée via Route, pas @app.route

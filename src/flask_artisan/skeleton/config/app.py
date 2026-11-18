@@ -1,4 +1,5 @@
 from app.providers.app_service_provider import AppServiceProvider
+from app.providers.route_service_provider import RouteServiceProvider
 
 from flask_artisan import env
 
@@ -10,5 +11,6 @@ config = {
     # Enregistrés dans l'ordre (register), puis tous bootés (boot).
     "providers": [
         AppServiceProvider,
+        RouteServiceProvider,
     ],
 }

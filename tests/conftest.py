@@ -1,6 +1,7 @@
 import pytest
 
 from flask_artisan.application import Application
+from flask_artisan.providers import ServiceProvider
 
 DEFAULT_APP = {
     "name": "'Blog'",
@@ -33,3 +34,19 @@ def make_project(tmp_path):
 def reset_application():
     yield
     Application.set_instance(None)
+
+
+@pytest.fixture
+def routed_app(make_project):
+    """App sans providers, puis un provider ajouté à chaud dont boot() appelle `declare()`."""
+
+    def _make(declare, kernel=None):
+        app = Application(make_project())
+        if kernel is not None:
+            from flask_artisan.routing import Router
+
+            app.make(Router).use_kernel(kernel)
+        app.register(type("RoutesProvider", (ServiceProvider,), {"boot": lambda self: declare()}))
+        return app
+
+    return _make

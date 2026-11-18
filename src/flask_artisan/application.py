@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, current_app, has_app_context
 
 from flask_artisan.config import Repository
 from flask_artisan.container import Container
 from flask_artisan.env import load_env_file
 from flask_artisan.providers import ServiceProvider
+from flask_artisan.routing import Router
 
 
 class Application(Flask, Container):
@@ -36,11 +37,17 @@ class Application(Flask, Container):
         self.instance(Application, self)
         self.instance("config", repository)
         self.instance(Repository, repository)
+        router = Router(self)
+        self.instance("router", router)
+        self.instance(Router, router)
         Application.set_instance(self)
 
-        for provider in repository.get("app.providers", []):
-            self.register(provider)
-        self.boot()
+        # Dans son propre contexte : façades et helpers visent cette app, même si une autre
+        # app a un contexte actif (fixtures de tests).
+        with self.app_context():
+            for provider in repository.get("app.providers", []):
+                self.register(provider)
+            self.boot()
 
     def _bridge_flask_config(self, repository: Repository) -> None:
         key = repository.get("app.key")
@@ -60,15 +67,18 @@ class Application(Flask, Container):
         provider.register()
         self._providers[provider_class] = provider
         if self._booted:
-            provider.boot()
+            with self.app_context(), self.make(Router).collecting():
+                provider.boot()
         return provider
 
     def boot(self) -> None:
         if self._booted:
             return
         self._booted = True
-        for provider in list(self._providers.values()):
-            provider.boot()
+        # Les routes déclarées pendant les boot() sont poussées dans Flask à la fin.
+        with self.make(Router).collecting():
+            for provider in list(self._providers.values()):
+                provider.boot()
 
     def base_path(self, path: str = "") -> Path:
         return self._base_path / path
@@ -84,6 +94,11 @@ class Application(Flask, Container):
 
     @classmethod
     def get_instance(cls) -> Application:
+        # Pendant une requête, l'app courante gagne (plusieurs apps dans un même processus).
+        if has_app_context():
+            current = current_app._get_current_object()
+            if isinstance(current, Application):
+                return current
         if Application._current is None:
             raise RuntimeError("Aucune application flask-artisan n'a été créée.")
         return Application._current

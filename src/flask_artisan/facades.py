@@ -23,3 +23,7 @@ class App(Facade):
 
 class Config(Facade):
     accessor = "config"
+
+
+class Route(Facade):
+    accessor = "router"

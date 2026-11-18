@@ -1,4 +1,4 @@
-from flask_artisan import ServiceProvider, config
+from flask_artisan import ServiceProvider
 
 
 class AppServiceProvider(ServiceProvider):
@@ -7,7 +7,5 @@ class AppServiceProvider(ServiceProvider):
         pass
 
     def boot(self):
-        # Route de démonstration en Flask standard (le routage façon Laravel arrive ensuite).
-        @self.app.route("/")
-        def home():
-            return {"app": config("app.name")}
+        # Code exécuté une fois tous les providers enregistrés (extensions Flask, etc.).
+        pass

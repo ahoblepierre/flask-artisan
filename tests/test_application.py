@@ -116,3 +116,41 @@ def test_application_does_not_override_flask():
 @pytest.mark.parametrize("raw", ["'0'", "'false'", "'no'", "''"])
 def test_debug_falsy_strings(make_project, raw):
     assert Application(make_project(debug=raw)).config["DEBUG"] is False
+
+
+def test_get_instance_prefers_current_app(make_project, tmp_path):
+    import shutil
+
+    base = make_project()
+    a = Application(base)
+    b = Application(shutil.copytree(base, tmp_path / "other"))
+    with a.app_context():
+        assert Application.get_instance() is a
+    assert Application.get_instance() is b
+
+
+def test_app_built_inside_other_app_context_boots_against_itself(make_project, tmp_path):
+    import shutil
+
+    from test_route_provider import ping
+
+    from flask_artisan import Route
+
+    base = make_project()
+    a = Application(base)
+    other = shutil.copytree(base, tmp_path / "other")
+    (other / "config" / "app.py").write_text(
+        (other / "config" / "app.py").read_text().replace("'Blog'", "'B'")
+    )
+    seen = []
+
+    class P(ServiceProvider):
+        def boot(self):
+            seen.append(config("app.name"))
+            Route.get("/b", ping)
+
+    with a.app_context():
+        b = Application(other)
+        b.register(P)
+    assert seen == ["B"]
+    assert b.test_client().get("/b").status_code == 200
