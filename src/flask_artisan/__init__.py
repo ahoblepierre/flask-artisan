@@ -4,6 +4,7 @@ from flask_artisan.config import Repository
 from flask_artisan.container import BindingResolutionError, Container
 from flask_artisan.facades import App, Config, Facade, Route
 from flask_artisan.helpers import app, base_path, config
+from flask_artisan.middleware import HttpKernel, Middleware
 from flask_artisan.providers import ServiceProvider
 from flask_artisan.routing import RouteError, Router
 
@@ -16,6 +17,8 @@ __all__ = [
     "Config",
     "Container",
     "Facade",
+    "HttpKernel",
+    "Middleware",
     "Repository",
     "Route",
     "RouteError",

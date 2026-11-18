@@ -4,6 +4,10 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from typing import Any
 
+from flask import request
+
+from flask_artisan.middleware import HttpKernel, resolve
+
 
 class RouteError(Exception):
     pass
@@ -77,6 +81,10 @@ class Router:
         self._pending: list[PendingRoute] = []
         self._collecting = 0
         self._groups: list[RouteGroup] = []
+        self._kernel: type[HttpKernel] = HttpKernel
+
+    def use_kernel(self, kernel: type[HttpKernel]) -> None:
+        self._kernel = kernel
 
     def prefix(self, prefix: str) -> RouteGroup:
         return RouteGroup(self, prefix=prefix)
@@ -135,7 +143,17 @@ class Router:
                 endpoint = self._auto_endpoint(route)
             else:
                 self._check_name(route, endpoint)
-            self._app.add_url_rule(route.rule, endpoint, self._view(route), methods=route.methods)
+            try:
+                stack = resolve(
+                    self._kernel, [*self._kernel.global_middleware, *route.middleware_stack]
+                )
+            except LookupError as exc:
+                raise RouteError(
+                    f"Middleware inconnu '{exc.args[0]}' sur la route {route.rule} : "
+                    "déclarez-le dans `middleware` ou `groups` du kernel."
+                ) from None
+            view = self._view(route, stack)
+            self._app.add_url_rule(route.rule, endpoint, view, methods=route.methods)
 
     def _add(self, rule: str, methods: list[str], handler) -> PendingRoute:
         if not self._collecting:
@@ -172,13 +190,22 @@ class Router:
             endpoint = f"{base}_{n}"
         return endpoint
 
-    def _view(self, route: PendingRoute) -> Callable:
+    def _view(self, route: PendingRoute, stack: list) -> Callable:
         app = self._app
         cls, target = route.handler
 
         def view(**values):
-            fn = getattr(app.make(cls), target) if cls else target
-            return app.make_response(app.call(fn, **values))
+            def run(i, req):
+                if i == len(stack):
+                    fn = getattr(app.make(cls), target) if cls else target
+                    return app.make_response(app.call(fn, **values))
+                middleware, params = stack[i]
+                # make_response : un middleware peut renvoyer un dict ou un tuple comme une vue.
+                return app.make_response(
+                    app.make(middleware).handle(req, lambda r: run(i + 1, r), *params)
+                )
+
+            return run(0, request._get_current_object())
 
         return view
 
