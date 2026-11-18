@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 
+# shortcut: suppose un package décompressé (toujours vrai pour un wheel) ; importlib.resources.as_file si zipimport un jour.
 SKELETON = Path(__file__).parent / "skeleton"
 
 

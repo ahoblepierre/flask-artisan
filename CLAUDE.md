@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Flask-Artisan : un framework open source qui apporte les conventions de Laravel à Flask. **Flask reste le moteur** (décision actée) : on ajoute une couche (conteneur, service providers, façades, routage à la Laravel, ORM façon Eloquent sur SQLAlchemy, auth, commandes ajoutées au CLI `flask`) sans casser la compatibilité avec l'écosystème Flask. Le différenciateur face à Masonite est justement d'être du Flask.
 
-Le code actuel est une ébauche à refondre, pas une base à préserver.
+Chantier 1 (socle) livré sur `feat/1-socle` ; les chantiers 2 à 5 restent à faire.
 
 ## Feuille de route (v0.1 publique = chantiers 1 à 5)
 
@@ -28,29 +28,20 @@ Ce repo est public et n'utilise **pas** le Jira de l'entreprise (remplace la rè
 - Spec / plan : `docs/superpowers/specs/GH-<n°>-spec.md`, `docs/superpowers/plans/GH-<n°>-plan.md`
 - Commit et titre de PR contiennent `(#<n°>)` ; la PR ferme l'issue (`Closes #<n°>`).
 
-## Commandes (état actuel)
+## Commandes
 
 ```bash
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-flask run                        # app.py -> app.create_app()
-flask db migrate -m "..." && flask db upgrade
-flask make:controller Nom | make:model Nom | make:middleware Nom | make:cm Nom
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+.venv/bin/pytest                                         # toute la suite
+.venv/bin/pytest tests/test_container.py::test_bound     # un seul test
+.venv/bin/ruff check . && .venv/bin/ruff format .        # lint + format (la CI vérifie les deux)
+.venv/bin/flask-artisan new /chemin/vers/demo            # générer un projet pour essayer
 ```
 
-Aucun test ni linter n'existe encore.
+## Architecture
 
-## Architecture actuelle (à refondre)
-
-- `app.py` charge `.env` puis appelle `create_app()` ([app/__init__.py](app/__init__.py)), qui initialise JWT, CSRF, Talisman, la config (`FLASK_ENV` → `app/config/*`), SQLAlchemy/Migrate/LoginManager, lance `db.create_all()`, puis enregistre blueprints et commandes.
-- Les extensions sont des singletons dans [app/extensions.py](app/extensions.py).
-- Les controllers sont des blueprints enregistrés à la main dans [app/controllers/__init__.py](app/controllers/__init__.py) ; les commandes `make:*` ([app/commands.py](app/commands.py)) réécrivent ce fichier par manipulation de texte.
-- Les modèles doivent être importés dans [app/models/__init__.py](app/models/__init__.py) pour être créés.
-
-## Pièges connus de l'ébauche
-
-- Mots de passe stockés en clair alors que `Auth.attempt` utilise `check_password_hash` : la connexion ne peut pas fonctionner.
-- Les routes `show`/`destroy` (et le template `make:controller`) attendent un `id` absent de l'URL → 500.
-- `make:cm` génère `Nom_bp` mais importe `nom_bp` → l'app ne démarre plus.
-- L'entry point `lara-flask=app.commands:cli` de `setup.py` pointe vers une fonction inexistante.
-- `build/`, `dist/`, `*.egg-info`, `__pycache__`, `.DS_Store` et `instance/dev.db` sont commités par erreur.
+- **Trois livrables distincts** : le repo (code + docs + tests), le package pip (`src/flask_artisan/` seulement) et le projet généré (copie de `src/flask_artisan/skeleton/`). Le squelette n'est pas un sous-package (`packages.find include = ["flask_artisan"]`) ; ses dotfiles sont listés explicitement dans `package-data`.
+- `Application` ([application.py](src/flask_artisan/application.py)) hérite de `Flask` **et** de `Container`. Le constructeur charge `.env`, puis `config/*.py` dans un `Repository`, fait le pont vers `app.config` (`SECRET_KEY`, `DEBUG`, contenu de `config/flask.py`), s'enregistre dans le conteneur (`"app"`, `"config"`), devient l'instance courante, puis register/boot les providers de `config("app.providers")`.
+- L'état interne du conteneur est préfixé `_container_` et deux tests garantissent qu'aucun nom ne masque un attribut de Flask : tout nouvel attribut d'`Application`/`Container` doit passer ces tests.
+- Façades et helpers résolvent via `Application.get_instance()` (la dernière app créée), sans cache. Les tests remettent l'instance à `None` (fixture autouse dans `tests/conftest.py`).
+- `flask run` écrase `app.debug` avec `FLASK_DEBUG` : le `.env` du squelette contient `FLASK_DEBUG=${APP_DEBUG}`. Les tests du projet généré tournent en sous-processus avec un environnement sans `FLASK_*`/`APP_*`.
