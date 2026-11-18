@@ -228,7 +228,8 @@ class Router:
 def _join(*parts: str) -> str:
     """Concatène préfixes et URL : ("/admin", "/") → "/admin", ("/api", "/users/") → "/api/users/"."""
     joined = "/" + "/".join(p.strip("/") for p in parts if p.strip("/"))
-    return joined + "/" if parts[-1].endswith("/") and joined != "/" else joined
+    keep_slash = parts[-1].endswith("/") and parts[-1].strip("/") != ""
+    return joined + "/" if keep_slash else joined
 
 
 def _resolve_handler(rule: str, handler: Any) -> tuple:

@@ -83,3 +83,21 @@ def test_custom_api_prefix(make_project):
         make_project, providers="[V1Routes]", api=ROUTE_FILE.format('Route.get("/ping", ping)')
     )
     assert Application(base).test_client().get("/v1/ping").status_code == 200
+
+
+class WebOnlyKernel(HttpKernel):
+    groups = {"web": []}
+
+
+class WebOnlyRoutes(RouteServiceProvider):
+    kernel = WebOnlyKernel
+
+
+def test_kernel_without_api_group_still_boots(make_project):
+    base = make_project(
+        providers="[WebOnlyRoutes]",
+        extra="from test_route_provider import WebOnlyRoutes",
+    )
+    (base / "routes").mkdir()
+    (base / "routes" / "api.py").write_text(ROUTE_FILE.format('Route.get("/ping", ping)'))
+    assert Application(base).test_client().get("/api/ping").status_code == 200

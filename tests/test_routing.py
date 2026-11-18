@@ -303,3 +303,14 @@ def test_resource_inside_prefix_group(routed_app):
     app = routed_app(declare)
     assert get(app, "/admin/photos").get_data(as_text=True) == "index"
     assert "admin.photos.index" in app.view_functions
+
+
+def test_root_route_under_prefix_has_no_trailing_slash(routed_app):
+    def declare():
+        with Route.prefix("/api"):
+            Route.get("/", ping)
+            Route.get("/users/", ping)
+
+    app = routed_app(declare)
+    assert get(app, "/api").status_code == 200
+    assert "/api/users/" in [r.rule for r in app.url_map.iter_rules()]

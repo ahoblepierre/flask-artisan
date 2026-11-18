@@ -15,7 +15,13 @@ class RouteServiceProvider(ServiceProvider):
 
     def boot(self):
         router = self.app.make(Router)
-        router.load(self.app.base_path("routes/web.py"), middleware=("web",))
+        router.load(self.app.base_path("routes/web.py"), middleware=self._group("web"))
         router.load(
-            self.app.base_path("routes/api.py"), prefix=self.api_prefix, middleware=("api",)
+            self.app.base_path("routes/api.py"),
+            prefix=self.api_prefix,
+            middleware=self._group("api"),
         )
+
+    def _group(self, name: str) -> tuple:
+        # Un kernel qui omet le groupe "web" ou "api" ne doit pas empêcher l'app de démarrer.
+        return (name,) if name in self.kernel.groups else ()

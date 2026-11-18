@@ -42,9 +42,12 @@ class Application(Flask, Container):
         self.instance(Router, router)
         Application.set_instance(self)
 
-        for provider in repository.get("app.providers", []):
-            self.register(provider)
-        self.boot()
+        # Dans son propre contexte : façades et helpers visent cette app, même si une autre
+        # app a un contexte actif (fixtures de tests).
+        with self.app_context():
+            for provider in repository.get("app.providers", []):
+                self.register(provider)
+            self.boot()
 
     def _bridge_flask_config(self, repository: Repository) -> None:
         key = repository.get("app.key")
@@ -64,7 +67,7 @@ class Application(Flask, Container):
         provider.register()
         self._providers[provider_class] = provider
         if self._booted:
-            with self.make(Router).collecting():
+            with self.app_context(), self.make(Router).collecting():
                 provider.boot()
         return provider
 
