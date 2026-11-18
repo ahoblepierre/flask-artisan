@@ -3,10 +3,10 @@ import re
 from datetime import date, datetime, time, timezone
 from typing import Any, ClassVar
 
-from sqlalchemy import DateTime, Integer, inspect, select
+from sqlalchemy import DateTime, Integer, inspect
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedColumn, mapped_column
 
-from flask_artisan.database.query import ModelNotFound
+from flask_artisan.database.query import Builder, ModelNotFound
 
 column = mapped_column
 
@@ -15,6 +15,22 @@ PROTECTED = frozenset({"id", "created_at", "updated_at", "deleted_at"})
 # Méthodes publiques de Model (et du constructeur de requêtes) : interdites comme noms de colonne.
 RESERVED = {
     "all",
+    "count",
+    "exists",
+    "first",
+    "first_or_fail",
+    "get",
+    "latest",
+    "limit",
+    "offset",
+    "or_where",
+    "order_by",
+    "pluck",
+    "where",
+    "where_in",
+    "where_not_null",
+    "where_null",
+    "with_",
     "create",
     "delete",
     "fill",
@@ -46,6 +62,76 @@ class Model(DeclarativeBase):
             _prepare(cls)
         super().__init_subclass__(**kw)
 
+    # --- classe : requêtes (chaque méthode démarre un Builder) ---
+
+    @classmethod
+    def query(cls) -> Builder:
+        return Builder(cls)
+
+    @classmethod
+    def where(cls, col: str, *args) -> Builder:
+        return cls.query().where(col, *args)
+
+    @classmethod
+    def or_where(cls, col: str, *args) -> Builder:
+        return cls.query().or_where(col, *args)
+
+    @classmethod
+    def where_in(cls, col: str, values) -> Builder:
+        return cls.query().where_in(col, values)
+
+    @classmethod
+    def where_null(cls, col: str) -> Builder:
+        return cls.query().where_null(col)
+
+    @classmethod
+    def where_not_null(cls, col: str) -> Builder:
+        return cls.query().where_not_null(col)
+
+    @classmethod
+    def order_by(cls, col: str, direction: str = "asc") -> Builder:
+        return cls.query().order_by(col, direction)
+
+    @classmethod
+    def latest(cls, col: str = "created_at") -> Builder:
+        return cls.query().latest(col)
+
+    @classmethod
+    def limit(cls, n: int) -> Builder:
+        return cls.query().limit(n)
+
+    @classmethod
+    def offset(cls, n: int) -> Builder:
+        return cls.query().offset(n)
+
+    @classmethod
+    def with_(cls, *relations: str) -> Builder:
+        return cls.query().with_(*relations)
+
+    @classmethod
+    def get(cls) -> list:
+        return cls.query().get()
+
+    @classmethod
+    def first(cls):
+        return cls.query().first()
+
+    @classmethod
+    def first_or_fail(cls):
+        return cls.query().first_or_fail()
+
+    @classmethod
+    def count(cls) -> int:
+        return cls.query().count()
+
+    @classmethod
+    def exists(cls) -> bool:
+        return cls.query().exists()
+
+    @classmethod
+    def pluck(cls, col: str) -> list:
+        return cls.query().pluck(col)
+
     # --- classe ---
 
     @classmethod
@@ -54,8 +140,7 @@ class Model(DeclarativeBase):
 
     @classmethod
     def find(cls, id: Any) -> "Model | None":
-        pk = inspect(cls).primary_key[0]
-        return _db().session.scalars(select(cls).where(pk == id)).first()
+        return cls.query().where(inspect(cls).primary_key[0].key, id).first()
 
     @classmethod
     def find_or_fail(cls, id: Any) -> "Model":
@@ -66,7 +151,7 @@ class Model(DeclarativeBase):
 
     @classmethod
     def all(cls) -> list:
-        return list(_db().session.scalars(select(cls)).all())
+        return cls.query().get()
 
     # --- instance ---
 
