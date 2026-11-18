@@ -3,7 +3,7 @@ import re
 from datetime import date, datetime, time, timezone
 from typing import Any, ClassVar
 
-from sqlalchemy import DateTime, Integer, inspect
+from sqlalchemy import DateTime, Integer, inspect, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedColumn, mapped_column
 
 from flask_artisan.database.query import Builder, ModelNotFound
@@ -18,6 +18,11 @@ RESERVED = {
     "count",
     "exists",
     "first",
+    "force_delete",
+    "only_trashed",
+    "restore",
+    "trashed",
+    "with_trashed",
     "first_or_fail",
     "get",
     "latest",
@@ -189,15 +194,23 @@ class Model(DeclarativeBase):
         return self.fill(**attrs).save()
 
     def delete(self) -> None:
+        if isinstance(self, SoftDeletes):
+            self.deleted_at = datetime.now(timezone.utc)
+            self.save()
+            return
+        self._hard_delete()
+
+    def _hard_delete(self) -> None:
         db = _db()
         db.session.delete(db.session.merge(self) if inspect(self).detached else self)
         _commit(db)
 
     def refresh(self) -> "Model":
-        session = _db().session
-        session.add(self)
-        session.refresh(self)
-        return self
+        cls = type(self)
+        pk = inspect(cls).primary_key[0]
+        stmt = select(cls).where(pk == getattr(self, pk.key))
+        options = {"populate_existing": True, "include_trashed": True}
+        return _db().session.scalars(stmt.execution_options(**options)).one()
 
     def to_dict(self, _seen: set | None = None) -> dict:
         """Colonnes moins `hidden`, plus les relations déjà chargées ; dates en ISO 8601."""
@@ -219,6 +232,32 @@ class Model(DeclarativeBase):
             else:
                 data[rel.key] = [v.to_dict(seen) for v in value if id(v) not in seen]
         return data
+
+
+class SoftDeletes:
+    """`delete()` remplit `deleted_at` ; les requêtes ignorent alors la ligne."""
+
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None, sort_order=101
+    )
+
+    @classmethod
+    def with_trashed(cls) -> Builder:
+        return cls.query().with_trashed()
+
+    @classmethod
+    def only_trashed(cls) -> Builder:
+        return cls.query().only_trashed()
+
+    def trashed(self) -> bool:
+        return self.deleted_at is not None
+
+    def restore(self):
+        self.deleted_at = None
+        return self.save()
+
+    def force_delete(self) -> None:
+        self._hard_delete()
 
 
 def _db():
@@ -275,4 +314,4 @@ def _table_name(class_name: str) -> str:
     return snake + "s"
 
 
-__all__ = ["Mapped", "MassAssignmentError", "Model", "column"]
+__all__ = ["Mapped", "MassAssignmentError", "Model", "SoftDeletes", "column"]

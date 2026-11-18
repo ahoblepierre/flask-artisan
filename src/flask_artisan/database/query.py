@@ -70,6 +70,13 @@ class Builder:
     def with_(self, *relations: str) -> "Builder":
         return self._copy(_load=(*self._load, *relations))
 
+    def with_trashed(self) -> "Builder":
+        self._require_soft_deletes()
+        return self._copy(_options={**self._options, "include_trashed": True})
+
+    def only_trashed(self) -> "Builder":
+        return self.with_trashed().where_not_null("deleted_at")
+
     # --- exécution ---
 
     def get(self) -> list:
@@ -131,6 +138,12 @@ class Builder:
         if self._offset is not None:
             stmt = stmt.offset(self._offset)
         return stmt
+
+    def _require_soft_deletes(self) -> None:
+        from flask_artisan.database.model import SoftDeletes
+
+        if not issubclass(self._model, SoftDeletes):
+            raise TypeError(f"{self._model.__name__} n'utilise pas SoftDeletes.")
 
     def _session(self):
         from flask_artisan.database.model import _db

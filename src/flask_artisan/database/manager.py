@@ -1,8 +1,8 @@
 import threading
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, scoped_session, sessionmaker
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import Session, scoped_session, sessionmaker, with_loader_criteria
 from sqlalchemy.pool import StaticPool
 
 from flask_artisan.database.connection import EXTRAS, DatabaseError, connection_url
@@ -18,6 +18,7 @@ class DatabaseManager:
         # expire_on_commit=False : les objets restent lisibles après save() et en fin de requête.
         self._factory = sessionmaker(expire_on_commit=False)
         self._sessions = scoped_session(self._factory)
+        event.listen(self._factory, "do_orm_execute", _exclude_trashed)
 
     @property
     def engine(self):
@@ -82,3 +83,16 @@ class DatabaseManager:
                 f"Pilote de base manquant pour '{name}' ({exc.name or exc}) : "
                 f'installez-le avec pip install "flask-artisan[{extra}]".'
             ) from exc
+
+
+def _exclude_trashed(state) -> None:
+    """Filtre global du soft delete, y compris pour les relations chargées à la demande."""
+    if not state.is_select or state.execution_options.get("include_trashed", False):
+        return
+    from flask_artisan.database.model import SoftDeletes
+
+    state.statement = state.statement.options(
+        with_loader_criteria(
+            SoftDeletes, lambda cls: cls.deleted_at.is_(None), include_aliases=True
+        )
+    )
