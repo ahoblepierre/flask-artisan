@@ -6,6 +6,7 @@ from typing import Any, ClassVar
 from sqlalchemy import DateTime, Integer, inspect, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedColumn, mapped_column
 
+from flask_artisan.database import relations
 from flask_artisan.database.query import Builder, ModelNotFound
 
 column = mapped_column
@@ -285,6 +286,9 @@ def _prepare(cls: type) -> None:
                 f"{cls.__name__}.{name} : '{name}' est une méthode de Model, "
                 "choisissez un autre nom de colonne ou de relation."
             )
+    for name, value in list(cls.__dict__.items()):
+        if isinstance(value, relations.Relation):
+            setattr(cls, name, relations.build(cls, name, value, _snake))
     if "__tablename__" not in cls.__dict__:
         cls.__tablename__ = _table_name(cls.__name__)
     if not any(isinstance(v, MappedColumn) and v.column.primary_key for v in cls.__dict__.values()):
@@ -302,11 +306,16 @@ def _declared_names(cls: type) -> set:
         names = set(annotationlib.get_annotations(cls, format=annotationlib.Format.FORWARDREF))
     except ImportError:
         names = set(pyinspect.get_annotations(cls))
-    return names | {k for k, v in cls.__dict__.items() if isinstance(v, MappedColumn)}
+    declared = (MappedColumn, relations.Relation)
+    return names | {k for k, v in cls.__dict__.items() if isinstance(v, declared)}
+
+
+def _snake(class_name: str) -> str:
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", class_name).lower()
 
 
 def _table_name(class_name: str) -> str:
-    snake = re.sub(r"(?<!^)(?=[A-Z])", "_", class_name).lower()
+    snake = _snake(class_name)
     if re.search(r"[^aeiou]y$", snake):
         return snake[:-1] + "ies"
     if re.search(r"(s|x|z|ch|sh)$", snake):

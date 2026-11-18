@@ -47,3 +47,4 @@ extend-exclude = ["*.md"]  # ruff formate aussi les blocs de code Markdown : doc
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = ["error::sqlalchemy.exc.SAWarning"]

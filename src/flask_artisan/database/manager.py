@@ -2,7 +2,13 @@ import threading
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session, scoped_session, sessionmaker, with_loader_criteria
+from sqlalchemy.orm import (
+    Session,
+    configure_mappers,
+    scoped_session,
+    sessionmaker,
+    with_loader_criteria,
+)
 from sqlalchemy.pool import StaticPool
 
 from flask_artisan.database.connection import EXTRAS, DatabaseError, connection_url
@@ -54,6 +60,7 @@ class DatabaseManager:
     def create_all(self) -> None:
         from flask_artisan.database.model import Model
 
+        configure_mappers()  # crée les tables pivot de belongs_to_many
         Model.metadata.create_all(self.engine)
 
     def drop_all(self) -> None:

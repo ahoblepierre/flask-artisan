@@ -3,6 +3,7 @@ import operator
 from typing import Any
 
 from sqlalchemy import func, inspect, literal, select
+from sqlalchemy.orm import selectinload
 from werkzeug.exceptions import NotFound
 
 
@@ -133,11 +134,25 @@ class Builder:
         stmt = self._filtered(stmt)
         if self._order:
             stmt = stmt.order_by(*self._order)
+        for path in self._load:
+            stmt = stmt.options(self._eager(path))
         if self._limit is not None:
             stmt = stmt.limit(self._limit)
         if self._offset is not None:
             stmt = stmt.offset(self._offset)
         return stmt
+
+    def _eager(self, path: str):
+        """`"posts.comments"` → selectinload(User.posts).selectinload(Post.comments)."""
+        model, option = self._model, None
+        for name in path.split("."):
+            rel = inspect(model).relationships.get(name)
+            if rel is None:
+                raise ValueError(f"{model.__name__} n'a pas de relation '{name}' ({path}).")
+            attr = getattr(model, name)
+            option = selectinload(attr) if option is None else option.selectinload(attr)
+            model = rel.mapper.class_
+        return option
 
     def _require_soft_deletes(self) -> None:
         from flask_artisan.database.model import SoftDeletes
