@@ -50,7 +50,7 @@ class Application(Flask, Container):
                 '(ex. python -c "import secrets; print(secrets.token_hex(32))").'
             )
         self.config["SECRET_KEY"] = key
-        self.config["DEBUG"] = bool(repository.get("app.debug", False))
+        self.config["DEBUG"] = _flag(repository.get("app.debug", False))
         self.config.update(repository.get("flask", {}))
 
     def register(self, provider_class: type[ServiceProvider]) -> ServiceProvider:
@@ -91,3 +91,10 @@ class Application(Flask, Container):
     @classmethod
     def set_instance(cls, app: Application | None) -> None:
         Application._current = app
+
+
+def _flag(value) -> bool:
+    """Même lecture que Flask pour FLASK_DEBUG : "0", "false", "no" et "" valent False."""
+    if isinstance(value, str):
+        return value.strip().lower() not in ("0", "false", "no", "")
+    return bool(value)

@@ -1,5 +1,8 @@
+import abc
 import threading
 import time
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -125,3 +128,49 @@ def test_bound():
     c.bind("x", lambda container: 1)
     assert c.bound("x")
     assert not c.bound("y")
+
+
+class WithPathDefault:
+    def __init__(self, root: Path = Path("/srv"), anything: Any = 3):
+        self.root = root
+        self.anything = anything
+
+
+class AbstractService(abc.ABC):
+    @abc.abstractmethod
+    def run(self): ...
+
+
+class NeedsAbstract:
+    def __init__(self, service: AbstractService):
+        self.service = service
+
+
+class AbstractWithDefault:
+    def __init__(self, service: AbstractService | None = None):
+        self.service = service
+
+
+def test_default_wins_over_autowiring_unbound_class():
+    obj = Container().make(WithPathDefault)
+    assert obj.root == Path("/srv")
+    assert obj.anything == 3
+
+
+def test_bound_dependency_wins_over_default():
+    c = Container()
+    c.instance(Path, Path("/bound"))
+    assert c.make(WithPathDefault).root == Path("/bound")
+
+
+def test_unbound_abstract_dependency_raises_resolution_error():
+    with pytest.raises(BindingResolutionError, match="NeedsAbstract"):
+        Container().make(NeedsAbstract)
+
+
+def test_closure_cycle_raises():
+    c = Container()
+    c.bind("a", lambda container: container.make("b"))
+    c.bind("b", lambda container: container.make("a"))
+    with pytest.raises(BindingResolutionError, match="circulaire"):
+        c.make("a")

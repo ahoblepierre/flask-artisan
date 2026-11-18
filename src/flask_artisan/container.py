@@ -41,14 +41,23 @@ class Container:
         if abstract in self._container_instances and not params:
             return self._container_instances[abstract]
 
-        concrete, shared = self._container_bindings.get(abstract, (abstract, False))
-        if not shared or params:
-            return self._container_build(abstract, concrete, params)
+        stack = self._container_stack()
+        if abstract in stack:
+            chain = " -> ".join(_name(a) for a in [*stack, abstract])
+            raise BindingResolutionError(f"Dépendance circulaire détectée : {chain}")
+        stack.append(abstract)
+        try:
+            concrete, shared = self._container_bindings.get(abstract, (abstract, False))
+            if not shared or params:
+                return self._container_build(abstract, concrete, params)
 
-        with self._container_lock:
-            if abstract not in self._container_instances:
-                self._container_instances[abstract] = self._container_build(abstract, concrete, {})
-            return self._container_instances[abstract]
+            with self._container_lock:
+                if abstract not in self._container_instances:
+                    built = self._container_build(abstract, concrete, {})
+                    self._container_instances[abstract] = built
+                return self._container_instances[abstract]
+        finally:
+            stack.pop()
 
     def _container_register(self, abstract: Abstract, concrete: Concrete, shared: bool) -> None:
         if concrete is None:
@@ -68,15 +77,11 @@ class Container:
         )
 
     def _container_autowire(self, cls: type, params: dict) -> Any:
-        stack = self._container_stack()
-        if cls in stack:
-            chain = " -> ".join(c.__name__ for c in [*stack, cls])
-            raise BindingResolutionError(f"Dépendance circulaire détectée : {chain}")
-        stack.append(cls)
-        try:
-            return cls(**self._container_arguments(cls, params))
-        finally:
-            stack.pop()
+        if inspect.isabstract(cls):
+            raise BindingResolutionError(
+                f"{cls.__name__} est abstraite : liez-la à une implémentation avec bind()."
+            )
+        return cls(**self._container_arguments(cls, params))
 
     def _container_arguments(self, cls: type, params: dict) -> dict:
         if cls.__init__ is object.__init__:
@@ -96,10 +101,13 @@ class Container:
                 args[name] = params[name]
                 continue
             hint = hints.get(name)
-            if self._container_resolvable(hint):
+            # Ordre Laravel : binding explicite, puis valeur par défaut, puis autowiring.
+            if hint is not None and self._container_is_key(hint) and self.bound(hint):
                 args[name] = self.make(hint)
             elif param.default is not param.empty:
                 args[name] = param.default
+            elif self._container_autowirable(hint):
+                args[name] = self.make(hint)
             else:
                 raise BindingResolutionError(
                     f"Impossible de résoudre le paramètre '{name}' de {cls.__name__} : "
@@ -107,15 +115,25 @@ class Container:
                 )
         return args
 
-    def _container_resolvable(self, hint: Any) -> bool:
-        if hint is None:
-            return False
-        if self.bound(hint):
-            return True
-        # Les types natifs (str, int…) ne sont pas auto-construits : valeur par défaut ou erreur.
-        return isinstance(hint, type) and hint.__module__ != "builtins"
+    @staticmethod
+    def _container_is_key(hint: Any) -> bool:
+        return isinstance(hint, (type, str))
+
+    @staticmethod
+    def _container_autowirable(hint: Any) -> bool:
+        # Les types natifs (str, int…), Any et les classes abstraites ne sont pas auto-construits.
+        return (
+            isinstance(hint, type)
+            and hint.__module__ != "builtins"
+            and hint is not Any
+            and not inspect.isabstract(hint)
+        )
 
     def _container_stack(self) -> list:
         if not hasattr(self._container_local, "stack"):
             self._container_local.stack = []
         return self._container_local.stack
+
+
+def _name(abstract: Any) -> str:
+    return abstract.__name__ if isinstance(abstract, type) else str(abstract)

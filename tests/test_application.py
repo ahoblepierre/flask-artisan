@@ -111,3 +111,8 @@ def test_instance_path_inside_project(make_project):
 def test_application_does_not_override_flask():
     own = {n for n in vars(Application) if not n.startswith("__")}
     assert own & set(dir(Flask)) == set()
+
+
+@pytest.mark.parametrize("raw", ["'0'", "'false'", "'no'", "''"])
+def test_debug_falsy_strings(make_project, raw):
+    assert Application(make_project(debug=raw)).config["DEBUG"] is False
