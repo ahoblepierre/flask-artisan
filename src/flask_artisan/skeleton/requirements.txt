@@ -1,0 +1,2 @@
+flask-artisan @ git+https://github.com/ahoblepierre/flask-artisan
+pytest
