@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Remplacer l'ébauche par un package pip `lara-flask` (Application = Flask + conteneur, providers, config, env, façades, helpers) et une commande `lara new` qui génère un projet prêt à `flask run`.
+**Goal:** Remplacer l'ébauche par un package pip `flask-artisan` (Application = Flask + conteneur, providers, config, env, façades, helpers) et une commande `artisan new` qui génère un projet prêt à `flask run`.
 
-**Architecture:** `Application` hérite de `Flask` et de `Container`. Au constructeur : `.env` → `Repository` de config → pont vers `app.config` → enregistrement dans le conteneur → providers (register puis boot). Façades et helpers résolvent via `Application.get_instance()`. Le squelette de projet vit dans `src/lara_flask/skeleton/` et est copié par `lara new`.
+**Architecture:** `Application` hérite de `Flask` et de `Container`. Au constructeur : `.env` → `Repository` de config → pont vers `app.config` → enregistrement dans le conteneur → providers (register puis boot). Façades et helpers résolvent via `Application.get_instance()`. Le squelette de projet vit dans `src/flask_artisan/skeleton/` et est copié par `artisan new`.
 
 **Tech Stack:** Python ≥ 3.10, Flask ≥ 3, python-dotenv, click (fourni par Flask), pytest, ruff, setuptools (pyproject), GitHub Actions.
 
@@ -15,9 +15,9 @@
 - Branche `feat/1-socle` ; chaque message de commit se termine par `(#1)`.
 - `requires-python = ">=3.10"` ; dépendances runtime : `flask>=3.0`, `python-dotenv>=1.0` — **rien d'autre**.
 - Extra `dev` : `pytest>=8`, `ruff>=0.6`.
-- Version `0.1.0.dev0`, nom de distribution `lara-flask`, package d'import `lara_flask`, entry point `lara = lara_flask.cli:main`.
+- Version `0.1.0.dev0`, nom de distribution `flask-artisan`, package d'import `flask_artisan`, entry point `artisan = flask_artisan.cli:main`.
 - Noms d'API repris de Laravel : `bind`, `singleton`, `instance`, `make`, `bound`, `register`, `boot`, `config()`, `env()`, `app()`, `base_path()`.
-- Pas de publication PyPI ; le `requirements.txt` du squelette contient `lara-flask @ git+https://github.com/ahoblepierre/lara-flask`.
+- Pas de publication PyPI ; le `requirements.txt` du squelette contient `flask-artisan @ git+https://github.com/ahoblepierre/flask-artisan`.
 - Messages d'erreur destinés aux utilisateurs en français.
 - `ruff check .` et `ruff format --check .` passent à la fin de chaque tâche.
 
@@ -35,40 +35,40 @@
 
 **Files:**
 - Delete: `app/`, `app.py`, `setup.py`, `requirements.txt`, `MANIFEST.in`, `migrations/`, `instance/`, `build/`, `dist/`, `flask_lara_app.egg-info/`, `__pycache__/`, tous les `.DS_Store` (`git rm -r`)
-- Create: `pyproject.toml`, `src/lara_flask/__init__.py`, `tests/test_package.py`, `.github/workflows/ci.yml`
+- Create: `pyproject.toml`, `src/flask_artisan/__init__.py`, `tests/test_package.py`, `.github/workflows/ci.yml`
 - Modify: `.gitignore`, `.env.example` (supprimer : il sera dans le squelette)
 
 **Interfaces:**
-- Produces: package importable `lara_flask` avec `__version__ = "0.1.0.dev0"`.
+- Produces: package importable `flask_artisan` avec `__version__ = "0.1.0.dev0"`.
 
 - [ ] **Step 1: Supprimer l'ébauche** avec `git rm -r` sur la liste ci-dessus. `.gitignore` devient : `.env`, `venv/`, `.venv/`, `__pycache__/`, `*.egg-info/`, `build/`, `dist/`, `.DS_Store`, `.pytest_cache/`, `.ruff_cache/`, `instance/`.
 
 - [ ] **Step 2: Écrire `pyproject.toml`**
   - `[build-system]` setuptools>=69 ; `[project]` selon Global Constraints, `readme = "README.md"`, `license = {text = "MIT"}`.
-  - `[tool.setuptools.packages.find] where = ["src"], include = ["lara_flask"]` (le squelette ne doit **pas** devenir un sous-package).
-  - `[tool.setuptools.package-data] lara_flask = ["skeleton/**/*", "skeleton/.env.example", "skeleton/.gitignore"]` (les globs n'attrapent pas les dotfiles).
+  - `[tool.setuptools.packages.find] where = ["src"], include = ["flask_artisan"]` (le squelette ne doit **pas** devenir un sous-package).
+  - `[tool.setuptools.package-data] flask_artisan = ["skeleton/**/*", "skeleton/.env.example", "skeleton/.gitignore"]` (les globs n'attrapent pas les dotfiles).
   - `[tool.ruff] line-length = 100, target-version = "py310"` ; `[tool.pytest.ini_options] testpaths = ["tests"]`.
 
 - [ ] **Step 3: Test**
 
 ```python
 def test_package_importable():
-    import lara_flask
-    assert lara_flask.__version__ == "0.1.0.dev0"
+    import flask_artisan
+    assert flask_artisan.__version__ == "0.1.0.dev0"
 ```
 
 - [ ] **Step 4: Installer et lancer** : `python -m venv .venv && . .venv/bin/activate && pip install -e ".[dev]" && pytest` → 1 passed.
 
 - [ ] **Step 5: CI** `.github/workflows/ci.yml` : sur push et pull_request, matrice Python 3.10/3.11/3.12/3.13, `pip install -e ".[dev]"`, `ruff check .`, `ruff format --check .`, `pytest`.
 
-- [ ] **Step 6: Commit** `chore: remplace l'ébauche par l'ossature du package lara-flask (#1)`
+- [ ] **Step 6: Commit** `chore: remplace l'ébauche par l'ossature du package flask-artisan (#1)`
 
 ---
 
 ### Task 2: `env()` et `Repository` de configuration
 
 **Files:**
-- Create: `src/lara_flask/env.py`, `src/lara_flask/config.py`, `tests/test_env.py`, `tests/test_config.py`
+- Create: `src/flask_artisan/env.py`, `src/flask_artisan/config.py`, `tests/test_env.py`, `tests/test_config.py`
 
 **Interfaces:**
 - Produces:
@@ -118,7 +118,7 @@ def test_load_env_file_missing_is_silent(tmp_path):
 
 - [ ] **Step 3: Vérifier l'échec** : `pytest tests/test_env.py tests/test_config.py` → ImportError.
 
-- [ ] **Step 4: Implémenter.** Chargement des fichiers avec `importlib.util.spec_from_file_location(f"lara_flask_config_{name}", path)` (jamais par nom de module), ordre alphabétique, fichiers `_*.py` ignorés.
+- [ ] **Step 4: Implémenter.** Chargement des fichiers avec `importlib.util.spec_from_file_location(f"flask_artisan_config_{name}", path)` (jamais par nom de module), ordre alphabétique, fichiers `_*.py` ignorés.
 
 - [ ] **Step 5: Vérifier** : `pytest` → tout passe.
 
@@ -129,7 +129,7 @@ def test_load_env_file_missing_is_silent(tmp_path):
 ### Task 3: Conteneur de services
 
 **Files:**
-- Create: `src/lara_flask/container.py`, `tests/test_container.py`
+- Create: `src/flask_artisan/container.py`, `tests/test_container.py`
 
 **Interfaces:**
 - Produces:
@@ -166,8 +166,8 @@ def test_load_env_file_missing_is_silent(tmp_path):
 ### Task 4: `Application`, `ServiceProvider` et helpers
 
 **Files:**
-- Create: `src/lara_flask/application.py`, `src/lara_flask/providers.py`, `src/lara_flask/helpers.py`, `tests/test_application.py`, `tests/test_helpers.py`, `tests/conftest.py`
-- Modify: `src/lara_flask/__init__.py` (exports)
+- Create: `src/flask_artisan/application.py`, `src/flask_artisan/providers.py`, `src/flask_artisan/helpers.py`, `tests/test_application.py`, `tests/test_helpers.py`, `tests/conftest.py`
+- Modify: `src/flask_artisan/__init__.py` (exports)
 
 **Interfaces:**
 - Consumes: `Container` (Task 3), `Repository`, `load_env_file`, `env` (Task 2).
@@ -175,7 +175,7 @@ def test_load_env_file_missing_is_silent(tmp_path):
   - `class Application(Flask, Container)` : `__init__(base_path: str | Path)`, `register(provider_class: type[ServiceProvider]) -> ServiceProvider`, `boot() -> None`, `base_path(path="") -> Path`, `config_path(path="") -> Path`, `app_path(path="") -> Path`, `environment() -> str`, `@classmethod get_instance() -> Application`, `@classmethod set_instance(app: Application | None) -> None`
   - `class ServiceProvider` : `__init__(app)`, `register()`, `boot()`
   - Helpers : `app(abstract=None, **params)`, `config(key=None, default=None)`, `base_path(path="") -> Path`
-  - `lara_flask.__init__` exporte : `Application, Container, BindingResolutionError, ServiceProvider, Repository, env, app, config, base_path, __version__` (les façades s'ajoutent en Task 5).
+  - `flask_artisan.__init__` exporte : `Application, Container, BindingResolutionError, ServiceProvider, Repository, env, app, config, base_path, __version__` (les façades s'ajoutent en Task 5).
   - Clés conteneur : `"app"` et `Application` → l'app ; `"config"` et `Repository` → le repository.
 
 - [ ] **Step 1: Fixture `make_project(tmp_path)`** dans `conftest.py` : écrit `config/app.py` (`name`, `env="testing"`, `debug=False`, `key="test-key"`, `providers=[]`) avec possibilité de surcharger, et un `.env` optionnel ; fixture autouse qui fait `Application.set_instance(None)` après chaque test.
@@ -210,8 +210,8 @@ def test_load_env_file_missing_is_silent(tmp_path):
 ### Task 5: Façades
 
 **Files:**
-- Create: `src/lara_flask/facades.py`, `tests/test_facades.py`
-- Modify: `src/lara_flask/__init__.py` (exporter `Facade`, `App`, `Config`)
+- Create: `src/flask_artisan/facades.py`, `tests/test_facades.py`
+- Modify: `src/flask_artisan/__init__.py` (exporter `Facade`, `App`, `Config`)
 
 **Interfaces:**
 - Consumes: `Application.get_instance()`, `make` (Task 4).
@@ -231,18 +231,18 @@ def test_load_env_file_missing_is_silent(tmp_path):
 
 ---
 
-### Task 6: Squelette et `lara new`
+### Task 6: Squelette et `artisan new`
 
 **Files:**
-- Create: `src/lara_flask/cli.py`, `src/lara_flask/skeleton/` (arborescence de la spec, section « Squelette et `lara new` »), `tests/test_cli.py`
+- Create: `src/flask_artisan/cli.py`, `src/flask_artisan/skeleton/` (arborescence de la spec, section « Squelette et `artisan new` »), `tests/test_cli.py`
 
 **Interfaces:**
 - Consumes: tout ce qui précède, via le projet généré.
-- Produces: `main()` (groupe click `lara`) avec la commande `new NAME`.
+- Produces: `main()` (groupe click `artisan`) avec la commande `new NAME`.
 
 Contenu fixé du squelette :
 - `.env.example` : `APP_NAME=`, `APP_ENV=local`, `APP_DEBUG=true`, `APP_KEY=`, `FLASK_DEBUG=${APP_DEBUG}`.
-- `config/app.py` : `name=env("APP_NAME", "Lara-Flask")`, `env=env("APP_ENV", "production")`, `debug=env("APP_DEBUG", False)`, `key=env("APP_KEY", "")`, `providers=[AppServiceProvider]`.
+- `config/app.py` : `name=env("APP_NAME", "Flask-Artisan")`, `env=env("APP_ENV", "production")`, `debug=env("APP_DEBUG", False)`, `key=env("APP_KEY", "")`, `providers=[AppServiceProvider]`.
 - `config/flask.py` : `config = {}` avec un commentaire d'exemple.
 - `app/providers/app_service_provider.py` : `AppServiceProvider.boot()` déclare `GET /` → `{"app": config("app.name")}` avec `@self.app.route`.
 - `bootstrap/app.py` : `app = Application(Path(__file__).resolve().parent.parent)`.
@@ -262,13 +262,13 @@ Contenu fixé du squelette :
 
 - [ ] **Step 2: Vérifier l'échec** : `pytest tests/test_cli.py`.
 
-- [ ] **Step 3: Implémenter `cli.py`** : copie de `importlib.resources.files("lara_flask") / "skeleton"` avec `shutil.copytree(..., dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))` ; `.env` = `.env.example` avec `APP_NAME=<nom du dossier>` et `APP_KEY=<secrets.token_hex(32)>` ; affiche `cd <nom>` et `flask run`.
+- [ ] **Step 3: Implémenter `cli.py`** : copie de `importlib.resources.files("flask_artisan") / "skeleton"` avec `shutil.copytree(..., dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))` ; `.env` = `.env.example` avec `APP_NAME=<nom du dossier>` et `APP_KEY=<secrets.token_hex(32)>` ; affiche `cd <nom>` et `flask run`.
 
 - [ ] **Step 4: Vérifier** : `pytest` → tout passe.
 
-- [ ] **Step 5: Vérifier le wheel** : `pip wheel . --no-deps -w /tmp/lf-wheel && unzip -l /tmp/lf-wheel/lara_flask-*.whl | grep skeleton/` → liste contient `skeleton/.env.example`, `skeleton/.gitignore`, `skeleton/wsgi.py` ; puis dans un venv neuf : `pip install /tmp/lf-wheel/lara_flask-*.whl && lara new /tmp/lf-demo && cd /tmp/lf-demo && flask run` → `curl http://127.0.0.1:5000/` répond `{"app": "lf-demo"}`.
+- [ ] **Step 5: Vérifier le wheel** : `pip wheel . --no-deps -w /tmp/lf-wheel && unzip -l /tmp/lf-wheel/flask_artisan-*.whl | grep skeleton/` → liste contient `skeleton/.env.example`, `skeleton/.gitignore`, `skeleton/wsgi.py` ; puis dans un venv neuf : `pip install /tmp/lf-wheel/flask_artisan-*.whl && artisan new /tmp/lf-demo && cd /tmp/lf-demo && flask run` → `curl http://127.0.0.1:5000/` répond `{"app": "lf-demo"}`.
 
-- [ ] **Step 6: Commit** `feat: squelette de projet et commande lara new (#1)`
+- [ ] **Step 6: Commit** `feat: squelette de projet et commande artisan new (#1)`
 
 ---
 
@@ -278,7 +278,7 @@ Contenu fixé du squelette :
 - Modify: `README.md`, `CLAUDE.md` (section Commandes et Architecture : remplacer l'état « ébauche » par le nouveau socle ; retirer « Pièges connus de l'ébauche »)
 - Create: `CONTRIBUTING.md`
 
-- [ ] **Step 1: README** : pitch « Laravel, mais c'est du Flask », installation (via git tant que PyPI n'est pas publié), `lara new`, exemples courts conteneur / provider / config / façade (repris des tests), feuille de route v0.1, licence MIT.
+- [ ] **Step 1: README** : pitch « Laravel, mais c'est du Flask », installation (via git tant que PyPI n'est pas publié), `artisan new`, exemples courts conteneur / provider / config / façade (repris des tests), feuille de route v0.1, licence MIT.
 
 - [ ] **Step 2: CONTRIBUTING.md** : `pip install -e ".[dev]"`, `pytest`, `pytest tests/test_container.py::test_bound`, `ruff check . && ruff format .`, conventions issues / branches / PR (copiées du `CLAUDE.md`).
 

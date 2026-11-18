@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Le projet
 
-Lara-Flask : un framework open source qui apporte les conventions de Laravel à Flask. **Flask reste le moteur** (décision actée) : on ajoute une couche (conteneur, service providers, façades, routage à la Laravel, ORM façon Eloquent sur SQLAlchemy, auth, CLI « artisan ») sans casser la compatibilité avec l'écosystème Flask. Le différenciateur face à Masonite est justement d'être du Flask.
+Flask-Artisan : un framework open source qui apporte les conventions de Laravel à Flask. **Flask reste le moteur** (décision actée) : on ajoute une couche (conteneur, service providers, façades, routage à la Laravel, ORM façon Eloquent sur SQLAlchemy, auth, CLI « artisan ») sans casser la compatibilité avec l'écosystème Flask. Le différenciateur face à Masonite est justement d'être du Flask.
 
 Le code actuel est une ébauche à refondre, pas une base à préserver.
 
@@ -12,7 +12,7 @@ Le code actuel est une ébauche à refondre, pas une base à préserver.
 
 Chaque chantier a sa propre spec et son propre plan, dans cet ordre :
 
-1. **Socle** : package pip `lara-flask` (framework) séparé d'un squelette de projet généré par `lara new <projet>` ; `Application` qui enveloppe Flask, conteneur, service providers, config `config/*.py` + `.env`, façades.
+1. **Socle** : package pip `flask-artisan` (framework) séparé d'un squelette de projet généré par `artisan new <projet>` ; `Application` qui enveloppe Flask, conteneur, service providers, config `config/*.py` + `.env`, façades.
 2. **Routage & middlewares** : `routes/web.py` / `routes/api.py`, controllers en classes, groupes/préfixes, middlewares nommés via un kernel.
 3. **ORM** : modèles façon Eloquent sur SQLAlchemy 2 (timestamps, soft delete, relations), migrations Alembic via le CLI.
 4. **Auth** : façade `Auth`, guards session et token, hash automatique, middleware `auth`.
@@ -22,7 +22,7 @@ Après v0.1 : validation (Form Requests), helpers, events, mail, cache, queues.
 
 ## Tickets, branches, specs
 
-Ce repo est public et n'utilise **pas** le Jira de l'entreprise (remplace la règle Jira globale). Les tickets sont des **GitHub Issues** sur `ahoblepierre/lara-flask` (créer avec `gh issue create`).
+Ce repo est public et n'utilise **pas** le Jira de l'entreprise (remplace la règle Jira globale). Les tickets sont des **GitHub Issues** sur `ahoblepierre/flask-artisan` (créer avec `gh issue create`).
 
 - Branche : `feat/<n°>-slug` ou `fix/<n°>-slug`
 - Spec / plan : `docs/superpowers/specs/GH-<n°>-spec.md`, `docs/superpowers/plans/GH-<n°>-plan.md`

@@ -1,15 +1,15 @@
 # GH-1 — Socle : package framework, Application, conteneur, providers, config, façades
 
-Ticket : https://github.com/ahoblepierre/lara-flask/issues/1
+Ticket : https://github.com/ahoblepierre/flask-artisan/issues/1
 Statut : brouillon, en attente d'approbation
 
 ## Intention
 
-Lara-Flask est un framework open source qui apporte les conventions de Laravel à Flask, **Flask restant le moteur**. Le différenciateur face à Masonite (« Laravel en Python » mais sans Flask) : toute l'écosystème Flask (extensions, `flask run`, doc, hébergeurs) fonctionne tel quel.
+Flask-Artisan est un framework open source qui apporte les conventions de Laravel à Flask, **Flask restant le moteur**. Le différenciateur face à Masonite (« Laravel en Python » mais sans Flask) : toute l'écosystème Flask (extensions, `flask run`, doc, hébergeurs) fonctionne tel quel.
 
 Ce chantier pose le socle sur lequel se brancheront les chantiers suivants de la v0.1 (routage, ORM, auth, CLI) :
 
-- un **package pip `lara-flask`** (le framework), séparé d'un **squelette de projet** généré par `lara new` ;
+- un **package pip `flask-artisan`** (le framework), séparé d'un **squelette de projet** généré par `artisan new` ;
 - une classe `Application` qui **est** un Flask ;
 - un conteneur de services, des service providers, une config à la Laravel, des façades et quelques helpers.
 
@@ -17,7 +17,7 @@ Public visé : un développeur Python (souvent venant de Laravel) qui veut déma
 
 ## Objectifs
 
-1. Installer le package puis `lara new blog && cd blog && flask run` donne une application qui répond. **Pas de publication PyPI dans ce chantier** (décision de Pierre : publication à la fin de la v0.1) ; l'objectif est vérifié avec un wheel construit localement, et le `requirements.txt` du squelette pointe vers `lara-flask @ git+https://github.com/ahoblepierre/lara-flask` jusqu'à la publication.
+1. Installer le package puis `artisan new blog && cd blog && flask run` donne une application qui répond. **Pas de publication PyPI dans ce chantier** (décision de Pierre : publication à la fin de la v0.1) ; l'objectif est vérifié avec un wheel construit localement, et le `requirements.txt` du squelette pointe vers `flask-artisan @ git+https://github.com/ahoblepierre/flask-artisan` jusqu'à la publication.
 2. Un développeur Laravel reconnaît immédiatement : `app.bind/singleton/make`, `ServiceProvider.register/boot`, `config("app.name")`, `env("APP_DEBUG")`, façades `App` et `Config`.
 3. Toute extension Flask s'installe comme d'habitude (`ext.init_app(app)`), typiquement dans un provider.
 4. Package testé (pytest) et CI GitHub Actions dès ce chantier.
@@ -47,9 +47,9 @@ Pas non plus dans ce chantier : bindings à portée de requête, cache des faça
 ### Organisation du repo
 
 ```
-lara-flask/
-├── pyproject.toml            # package "lara-flask", entry point `lara`
-├── src/lara_flask/
+flask-artisan/
+├── pyproject.toml            # package "flask-artisan", entry point `artisan`
+├── src/flask_artisan/
 │   ├── __init__.py           # exporte Application, ServiceProvider, Facade, app, config, env, base_path
 │   ├── container.py          # Container, BindingResolutionError
 │   ├── application.py        # Application(Flask, Container)
@@ -58,8 +58,8 @@ lara-flask/
 │   ├── env.py                # env() + chargement .env
 │   ├── helpers.py            # app(), config(), base_path()
 │   ├── facades.py            # Facade, App, Config
-│   ├── cli.py                # `lara new`
-│   └── skeleton/             # squelette copié par `lara new` (données du package)
+│   ├── cli.py                # `artisan new`
+│   └── skeleton/             # squelette copié par `artisan new` (données du package)
 ├── tests/
 ├── docs/
 └── .github/workflows/ci.yml
@@ -104,7 +104,7 @@ Au constructeur, dans cet ordre :
 
 **Mode debug sous `flask run`** : la CLI Flask écrase `app.debug` avec `FLASK_DEBUG` après chargement de l'app, donc le pont `DEBUG` ne suffit pas. Le `.env` généré contient `FLASK_DEBUG=${APP_DEBUG}` (interpolation de python-dotenv, que la CLI Flask charge avant l'app) : `APP_DEBUG` reste la seule valeur à changer. Le pont `DEBUG` couvre les serveurs WSGI (gunicorn…). Un test vérifie le chemin réel via le `FlaskGroup`/`ScriptInfo` de Flask, pas seulement `Application(...)`. *(Décision de Claude.)*
 
-Si `app.key` est vide, le constructeur lève une erreur explicite (« APP_KEY manquant dans .env »). `lara new` la génère, donc ça n'arrive qu'en cas d'oubli.
+Si `app.key` est vide, le constructeur lève une erreur explicite (« APP_KEY manquant dans .env »). `artisan new` la génère, donc ça n'arrive qu'en cas d'oubli.
 
 Autres méthodes : `register(provider_class)` (si l'app est déjà bootée, boote aussi ce provider), `boot()` (idempotent), `base_path(path="")`, `config_path(path="")`, `app_path(path="")`, `environment()` → `config("app.env")`.
 
@@ -147,7 +147,7 @@ Le métaclasse redirige tout accès d'attribut vers l'objet résolu. Pas de cach
 
 `app(abstract=None, **params)` (sans argument : l'application ; sinon `make`), `config(key=None, default=None)` (sans argument : le `Repository`), `env(...)`, `base_path(path="")`. Erreur claire si aucune application n'a été créée.
 
-### Squelette et `lara new`
+### Squelette et `artisan new`
 
 Squelette généré :
 
@@ -159,12 +159,12 @@ blog/
 ├── config/flask.py       # clés passées telles quelles à app.config
 ├── tests/test_app.py     # l'app démarre
 ├── wsgi.py               # from bootstrap.app import app  (détecté par `flask run`)
-├── .env.example  .env  .gitignore  requirements.txt (lara-flask, via git jusqu'à la publication PyPI)
+├── .env.example  .env  .gitignore  requirements.txt (flask-artisan, via git jusqu'à la publication PyPI)
 ```
 
 En attendant le routage du chantier 2, `AppServiceProvider.boot()` déclare une route `/` de démonstration avec le `@app.route` Flask standard (renvoie le nom de l'app) — ce qui montre aussi que Flask « nu » marche.
 
-`lara new <nom>` (click, déjà dépendance de Flask) :
+`artisan new <nom>` (click, déjà dépendance de Flask) :
 
 - refuse si le dossier existe et n'est pas vide ;
 - copie `skeleton/` ;
@@ -174,7 +174,7 @@ En attendant le routage du chantier 2, `AppServiceProvider.boot()` déclare une 
 ### Dépendances et outillage
 
 - Python ≥ 3.10. Dépendances : `flask>=3`, `python-dotenv`. Rien d'autre dans le cœur (JWT, Talisman, WTF, Login, SQLAlchemy reviendront dans leurs chantiers respectifs).
-- `pyproject.toml` (setuptools), version `0.1.0.dev0`, entry point `lara = lara_flask.cli:main`, `skeleton/` inclus comme données du package.
+- `pyproject.toml` (setuptools), version `0.1.0.dev0`, entry point `artisan = flask_artisan.cli:main`, `skeleton/` inclus comme données du package.
 - Dev : `pytest`, `ruff` (lint + format) en extra `dev`.
 - CI GitHub Actions : ruff + pytest sur Python 3.10 à 3.13.
 
@@ -185,11 +185,11 @@ En attendant le routage du chantier 2, `AppServiceProvider.boot()` déclare une 
 - `env()` : chaque conversion.
 - Application : est une instance de `Flask` ; pont `SECRET_KEY`/`DEBUG`/`config/flask.py` ; ordre register-puis-boot ; provider enregistré après boot est booté ; erreur si `APP_KEY` absent.
 - Façades et helpers : résolution, erreur sans application.
-- `lara new` : génère le projet dans `tmp_path`, `.env` contient une clé, refus sur dossier non vide ; le projet généré démarre et `GET /` répond 200 (via le client de test Flask).
+- `artisan new` : génère le projet dans `tmp_path`, `.env` contient une clé, refus sur dossier non vide ; le projet généré démarre et `GET /` répond 200 (via le client de test Flask).
 
 ### Documentation
 
-README réécrit : pitch (« Laravel, mais c'est du Flask »), installation, `lara new`, conteneur/providers/config/façades en exemples courts, état de la feuille de route. `CONTRIBUTING.md` court : installation dev, lancer tests et ruff, conventions issues/branches/PR du `CLAUDE.md`.
+README réécrit : pitch (« Laravel, mais c'est du Flask »), installation, `artisan new`, conteneur/providers/config/façades en exemples courts, état de la feuille de route. `CONTRIBUTING.md` court : installation dev, lancer tests et ruff, conventions issues/branches/PR du `CLAUDE.md`.
 
 ## Laissé au builder
 
