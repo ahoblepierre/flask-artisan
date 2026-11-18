@@ -1,6 +1,12 @@
 .env
-/venv
-
-/instance
-
-setup.py
+venv/
+.venv/
+__pycache__/
+*.egg-info/
+build/
+dist/
+.DS_Store
+.pytest_cache/
+.ruff_cache/
+instance/
+.superpowers/

@@ -1,1 +1,0 @@
-from app.middleware.middleware import auth_required
