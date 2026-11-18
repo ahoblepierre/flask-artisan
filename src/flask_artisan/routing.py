@@ -29,6 +29,46 @@ class PendingRoute:
         return self
 
 
+class RouteGroup:
+    """Attributs partagés par les routes déclarées dans un bloc `with`."""
+
+    def __init__(self, router: "Router", prefix: str = "", name: str = "", middleware=()):
+        self._router = router
+        self._prefix = prefix
+        self._name = name
+        self._middleware = list(middleware)
+
+    def prefix(self, prefix: str) -> "RouteGroup":
+        self._prefix += prefix
+        return self
+
+    def name(self, name: str) -> "RouteGroup":
+        self._name += name
+        return self
+
+    def middleware(self, *items) -> "RouteGroup":
+        self._middleware.extend(items)
+        return self
+
+    def __enter__(self) -> "RouteGroup":  # noqa: PYI034 (typing.Self exige 3.11)
+        self._router._groups.append(self)
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._router._groups.remove(self)
+
+
+_RESOURCE = [
+    ("index", ["GET"], ""),
+    ("create", ["GET"], "/create"),
+    ("store", ["POST"], ""),
+    ("show", ["GET"], "/<id>"),
+    ("edit", ["GET"], "/<id>/edit"),
+    ("update", ["PUT", "PATCH"], "/<id>"),
+    ("destroy", ["DELETE"], "/<id>"),
+]
+
+
 class Router:
     """Collecte les routes déclarées avec la façade `Route` et les enregistre dans Flask."""
 
@@ -36,6 +76,27 @@ class Router:
         self._app = app
         self._pending: list[PendingRoute] = []
         self._collecting = 0
+        self._groups: list[RouteGroup] = []
+
+    def prefix(self, prefix: str) -> RouteGroup:
+        return RouteGroup(self, prefix=prefix)
+
+    def name(self, name: str) -> RouteGroup:
+        return RouteGroup(self, name=name)
+
+    def middleware(self, *items) -> RouteGroup:
+        return RouteGroup(self, middleware=items)
+
+    def group(self, prefix: str = "", middleware=(), name: str = "") -> RouteGroup:
+        return RouteGroup(self, prefix=prefix, name=name, middleware=middleware)
+
+    def resource(self, name: str, controller: type) -> None:
+        """Routes CRUD pour les méthodes que `controller` définit (index, show, store…)."""
+        base = "/" + name.strip("/")
+        for method, verbs, suffix in _RESOURCE:
+            if callable(getattr(controller, method, None)):
+                route = self._add(base + suffix, verbs, (controller, method))
+                route.name(f"{name.strip('/').replace('/', '.')}.{method}")
 
     def get(self, rule: str, handler) -> PendingRoute:
         return self._add(rule, ["GET"], handler)
@@ -82,7 +143,10 @@ class Router:
                 f"Route {rule} déclarée hors du boot : déclarez vos routes dans routes/*.py "
                 "ou dans boot() d'un provider."
             )
-        route = PendingRoute(rule, methods, _resolve_handler(rule, handler))
+        rule = _join(*(g._prefix for g in self._groups), rule)
+        name_prefix = "".join(g._name for g in self._groups)
+        route = PendingRoute(rule, methods, _resolve_handler(rule, handler), name_prefix)
+        route.middleware_stack = [m for g in self._groups for m in g._middleware]
         self._pending.append(route)
         return route
 
@@ -117,6 +181,12 @@ class Router:
             return app.make_response(app.call(fn, **values))
 
         return view
+
+
+def _join(*parts: str) -> str:
+    """Concatène préfixes et URL : ("/admin", "/") → "/admin", ("/api", "/users/") → "/api/users/"."""
+    joined = "/" + "/".join(p.strip("/") for p in parts if p.strip("/"))
+    return joined + "/" if parts[-1].endswith("/") and joined != "/" else joined
 
 
 def _resolve_handler(rule: str, handler: Any) -> tuple:
