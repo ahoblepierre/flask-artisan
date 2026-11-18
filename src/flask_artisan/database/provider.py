@@ -1,3 +1,4 @@
+from flask_artisan.database.json import ModelJSONProvider
 from flask_artisan.database.manager import DatabaseManager
 from flask_artisan.providers import ServiceProvider
 
@@ -10,3 +11,5 @@ class DatabaseServiceProvider(ServiceProvider):
         self.app.instance("db", manager)
         self.app.instance(DatabaseManager, manager)
         self.app.teardown_appcontext(lambda exc: manager.remove())
+        # Flask crée son fournisseur JSON dans __init__ : on le remplace ici.
+        self.app.json = ModelJSONProvider(self.app)
