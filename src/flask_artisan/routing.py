@@ -1,7 +1,9 @@
+import importlib.util
 import inspect
 import sys
 from collections.abc import Callable
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 from flask import request
@@ -97,6 +99,19 @@ class Router:
 
     def group(self, prefix: str = "", middleware=(), name: str = "") -> RouteGroup:
         return RouteGroup(self, prefix=prefix, name=name, middleware=middleware)
+
+    def load(self, path: Path, prefix: str = "", middleware=()) -> None:
+        """Exécute un fichier de routes dans un groupe ; un fichier absent est ignoré."""
+        path = Path(path)
+        if not path.exists():
+            return
+        spec = importlib.util.spec_from_file_location(f"flask_artisan_routes_{path.stem}", path)
+        module = importlib.util.module_from_spec(spec)
+        with self.group(prefix=prefix, middleware=middleware):
+            try:
+                spec.loader.exec_module(module)
+            except Exception as exc:
+                raise RouteError(f"Erreur dans {path} : {exc}") from exc
 
     def resource(self, name: str, controller: type) -> None:
         """Routes CRUD pour les méthodes que `controller` définit (index, show, store…)."""
