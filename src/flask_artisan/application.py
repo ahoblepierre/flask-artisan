@@ -8,6 +8,7 @@ from flask_artisan.config import Repository
 from flask_artisan.container import Container
 from flask_artisan.env import load_env_file
 from flask_artisan.providers import ServiceProvider
+from flask_artisan.routing import Router
 
 
 class Application(Flask, Container):
@@ -36,6 +37,9 @@ class Application(Flask, Container):
         self.instance(Application, self)
         self.instance("config", repository)
         self.instance(Repository, repository)
+        router = Router(self)
+        self.instance("router", router)
+        self.instance(Router, router)
         Application.set_instance(self)
 
         for provider in repository.get("app.providers", []):
@@ -60,15 +64,18 @@ class Application(Flask, Container):
         provider.register()
         self._providers[provider_class] = provider
         if self._booted:
-            provider.boot()
+            with self.make(Router).collecting():
+                provider.boot()
         return provider
 
     def boot(self) -> None:
         if self._booted:
             return
         self._booted = True
-        for provider in list(self._providers.values()):
-            provider.boot()
+        # Les routes déclarées pendant les boot() sont poussées dans Flask à la fin.
+        with self.make(Router).collecting():
+            for provider in list(self._providers.values()):
+                provider.boot()
 
     def base_path(self, path: str = "") -> Path:
         return self._base_path / path
