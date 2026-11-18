@@ -54,7 +54,7 @@
 | `src/flask_artisan/facades.py`, `src/flask_artisan/__init__.py` | façade `DB` |
 | `src/flask_artisan/skeleton/…` | modèles, config, migrations |
 | `tests/conftest.py` | fixture `db_app` |
-| `tests/database/test_*.py` (nouveau dossier, avec `__init__.py`) | — |
+| `tests/orm/test_*.py` (nouveau dossier, avec `__init__.py`) | — |
 | `README.md`, `CLAUDE.md` | doc |
 
 ## Fixture de test commune (tâche 1)
@@ -68,7 +68,7 @@
 **Fichiers :**
 - Modifier : `pyproject.toml`, `src/flask_artisan/facades.py`, `src/flask_artisan/__init__.py`, `tests/conftest.py`
 - Créer : `database/__init__.py`, `connection.py`, `manager.py`, `provider.py`
-- Test : `tests/database/test_connection.py`, `tests/database/test_manager.py`
+- Test : `tests/orm/test_connection.py`, `tests/orm/test_manager.py`
 
 **Interfaces :**
 - Produit :
@@ -117,7 +117,7 @@
 **Fichiers :**
 - Créer : `database/model.py`, `database/json.py`, et le début de `database/query.py` (`ModelNotFound`, plus le strict nécessaire à `find`/`all`)
 - Modifier : `database/provider.py` (JSON), `database/__init__.py`
-- Test : `tests/database/test_model.py`
+- Test : `tests/orm/test_model.py`
 
 **Interfaces :**
 - Consomme : `DatabaseManager.session`, `in_transaction()`.
@@ -165,7 +165,7 @@
 
 **Fichiers :**
 - Modifier : `database/query.py`, `database/model.py`
-- Test : `tests/database/test_query.py`
+- Test : `tests/orm/test_query.py`
 
 **Interfaces :**
 - Consomme : `Model` (tâche 2).
@@ -199,7 +199,7 @@
 
 **Fichiers :**
 - Modifier : `database/model.py`, `database/manager.py` (événement `do_orm_execute`), `database/query.py`
-- Test : `tests/database/test_soft_deletes.py`
+- Test : `tests/orm/test_soft_deletes.py`
 
 **Interfaces :**
 - Produit :
@@ -224,7 +224,7 @@
 **Fichiers :**
 - Créer : `database/relations.py`
 - Modifier : `database/model.py`, `database/query.py`, `database/manager.py` (`create_all` appelle `configure_mappers()` d'abord)
-- Test : `tests/database/test_relations.py`
+- Test : `tests/orm/test_relations.py`
 
 **Interfaces :**
 - Produit :
@@ -255,7 +255,7 @@
 **Fichiers :**
 - Créer : `database/migrations.py`, `database/alembic_env/env.py`, `database/alembic_env/script.py.mako`
 - Modifier : `database/provider.py` (dans `register()` : `app.cli.add_command(...)` pour les 4 commandes)
-- Test : `tests/database/test_migrations.py`
+- Test : `tests/orm/test_migrations.py`
 
 **Interfaces :**
 - Produit :
