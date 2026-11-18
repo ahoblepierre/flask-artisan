@@ -43,5 +43,11 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 - **Trois livrables distincts** : le repo (code + docs + tests), le package pip (`src/flask_artisan/` seulement) et le projet généré (copie de `src/flask_artisan/skeleton/`). Le squelette n'est pas un sous-package (`packages.find include = ["flask_artisan"]`) ; ses dotfiles sont listés explicitement dans `package-data`.
 - `Application` ([application.py](src/flask_artisan/application.py)) hérite de `Flask` **et** de `Container`. Le constructeur charge `.env`, puis `config/*.py` dans un `Repository`, fait le pont vers `app.config` (`SECRET_KEY`, `DEBUG`, contenu de `config/flask.py`), s'enregistre dans le conteneur (`"app"`, `"config"`), devient l'instance courante, puis register/boot les providers de `config("app.providers")`.
 - L'état interne du conteneur est préfixé `_container_` et deux tests garantissent qu'aucun nom ne masque un attribut de Flask : tout nouvel attribut d'`Application`/`Container` doit passer ces tests.
-- Façades et helpers résolvent via `Application.get_instance()` (la dernière app créée), sans cache. Les tests remettent l'instance à `None` (fixture autouse dans `tests/conftest.py`).
+- Façades et helpers résolvent via `Application.get_instance()`, sans cache. Les tests remettent l'instance à `None` (fixture autouse dans `tests/conftest.py`).
+- **Routage** ([routing.py](src/flask_artisan/routing.py)) : un `Router` est enregistré dans le conteneur (`"router"`, façade `Route`).
+  - Les routes ne sont acceptées que dans la « fenêtre de collecte » que `Application.boot()` (et `register()` après le boot) ouvre autour des `boot()` des providers.
+  - À la fermeture de la fenêtre, `flush()` les pousse dans Flask avec `add_url_rule`. C'est ce qui permet à `.name()` de s'appliquer après `Route.get()`.
+  - Chaque vue exécute le pipeline de middlewares résolu depuis le kernel au `flush` ([middleware.py](src/flask_artisan/middleware.py)), puis le handler via `app.make` (controller) et `app.call` (injection). Chaque résultat passe par `make_response`.
+  - `RouteServiceProvider` branche le kernel dans `register()` et charge `routes/*.py` dans `boot()`.
+- `Application.get_instance()` renvoie `current_app` pendant une requête, sinon la dernière app créée.
 - `flask run` écrase `app.debug` avec `FLASK_DEBUG` : le `.env` du squelette contient `FLASK_DEBUG=${APP_DEBUG}`. Les tests du projet généré tournent en sous-processus avec un environnement sans `FLASK_*`/`APP_*`.
