@@ -81,21 +81,34 @@ class Container:
             raise BindingResolutionError(
                 f"{cls.__name__} est abstraite : liez-la à une implémentation avec bind()."
             )
-        return cls(**self._container_arguments(cls, params))
-
-    def _container_arguments(self, cls: type, params: dict) -> dict:
         if cls.__init__ is object.__init__:
-            return dict(params)
-        try:
-            hints = typing.get_type_hints(cls.__init__)
-        except Exception as exc:
-            raise BindingResolutionError(
-                f"Annotations illisibles dans {cls.__name__}.__init__ : {exc}"
-            ) from exc
+            return cls(**params)
+        args = self._container_arguments(
+            cls.__init__, cls.__name__, params, keep_unknown=False, skip_first=True
+        )
+        return cls(**args)
 
+    def call(self, fn: Callable, **params) -> Any:
+        """Appelle `fn` en injectant ses paramètres (valeurs passées, puis ordre de make)."""
+        owner = getattr(fn, "__qualname__", repr(fn))
+        return fn(**self._container_arguments(fn, owner, params, keep_unknown=True))
+
+    def _container_arguments(
+        self, fn: Callable, owner: str, params: dict, *, keep_unknown: bool, skip_first=False
+    ) -> dict:
+        try:
+            hints = typing.get_type_hints(fn)
+        except Exception as exc:
+            raise BindingResolutionError(f"Annotations illisibles dans {owner} : {exc}") from exc
+
+        parameters = list(inspect.signature(fn).parameters.items())[1 if skip_first else 0 :]
         args = {}
-        for name, param in list(inspect.signature(cls.__init__).parameters.items())[1:]:
-            if param.kind in (param.VAR_POSITIONAL, param.VAR_KEYWORD):
+        for name, param in parameters:
+            if param.kind == param.VAR_KEYWORD:
+                if keep_unknown:
+                    args.update({k: v for k, v in params.items() if k not in args})
+                continue
+            if param.kind == param.VAR_POSITIONAL:
                 continue
             if name in params:
                 args[name] = params[name]
@@ -110,8 +123,9 @@ class Container:
                 args[name] = self.make(hint)
             else:
                 raise BindingResolutionError(
-                    f"Impossible de résoudre le paramètre '{name}' de {cls.__name__} : "
-                    "ajoutez une annotation de classe, une valeur par défaut ou passez-le à make()."
+                    f"Impossible de résoudre le paramètre '{name}' de {owner} : "
+                    "ajoutez une annotation de classe, une valeur par défaut ou passez-le "
+                    "explicitement."
                 )
         return args
 
