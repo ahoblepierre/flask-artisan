@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flask-artisan"
+version = "0.1.0.dev0"
+description = "Les conventions de Laravel pour Flask : conteneur, providers, config, façades."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = ["flask>=3.0", "python-dotenv>=1.0"]
+classifiers = [
+    "Framework :: Flask",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+flask-artisan = "flask_artisan.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/ahoblepierre/flask-artisan"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["flask_artisan"]
+
+[tool.setuptools.package-data]
+flask_artisan = ["skeleton/**/*", "skeleton/.env.example", "skeleton/.gitignore"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["*.md"]  # ruff formate aussi les blocs de code Markdown : docs hors périmètre
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

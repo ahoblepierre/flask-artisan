@@ -1,1 +1,0 @@
-from app.authentication.auth import Auth
