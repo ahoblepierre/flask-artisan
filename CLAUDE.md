@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Le projet
 
-Flask-Artisan : un framework open source qui apporte les conventions de Laravel à Flask. **Flask reste le moteur** (décision actée) : on ajoute une couche (conteneur, service providers, façades, routage à la Laravel, ORM façon Eloquent sur SQLAlchemy, auth, CLI « artisan ») sans casser la compatibilité avec l'écosystème Flask. Le différenciateur face à Masonite est justement d'être du Flask.
+Flask-Artisan : un framework open source qui apporte les conventions de Laravel à Flask. **Flask reste le moteur** (décision actée) : on ajoute une couche (conteneur, service providers, façades, routage à la Laravel, ORM façon Eloquent sur SQLAlchemy, auth, commandes ajoutées au CLI `flask`) sans casser la compatibilité avec l'écosystème Flask. Le différenciateur face à Masonite est justement d'être du Flask.
 
 Le code actuel est une ébauche à refondre, pas une base à préserver.
 
@@ -12,11 +12,11 @@ Le code actuel est une ébauche à refondre, pas une base à préserver.
 
 Chaque chantier a sa propre spec et son propre plan, dans cet ordre :
 
-1. **Socle** : package pip `flask-artisan` (framework) séparé d'un squelette de projet généré par `artisan new <projet>` ; `Application` qui enveloppe Flask, conteneur, service providers, config `config/*.py` + `.env`, façades.
+1. **Socle** : package pip `flask-artisan` (framework) séparé d'un squelette de projet généré par `flask-artisan new <projet>` ; `Application` qui enveloppe Flask, conteneur, service providers, config `config/*.py` + `.env`, façades.
 2. **Routage & middlewares** : `routes/web.py` / `routes/api.py`, controllers en classes, groupes/préfixes, middlewares nommés via un kernel.
 3. **ORM** : modèles façon Eloquent sur SQLAlchemy 2 (timestamps, soft delete, relations), migrations Alembic via le CLI.
 4. **Auth** : façade `Auth`, guards session et token, hash automatique, middleware `auth`.
-5. **CLI** : `make:*`, `serve`, `migrate`, `route:list`.
+5. **CLI** : commandes ajoutées à `flask` (`flask make:*`, `flask migrate`, `flask route:list`) ; seule la création de projet passe par `flask-artisan new`.
 
 Après v0.1 : validation (Form Requests), helpers, events, mail, cache, queues.
 

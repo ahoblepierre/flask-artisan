@@ -9,7 +9,7 @@ Flask-Artisan est un framework open source qui apporte les conventions de Larave
 
 Ce chantier pose le socle sur lequel se brancheront les chantiers suivants de la v0.1 (routage, ORM, auth, CLI) :
 
-- un **package pip `flask-artisan`** (le framework), séparé d'un **squelette de projet** généré par `artisan new` ;
+- un **package pip `flask-artisan`** (le framework), séparé d'un **squelette de projet** généré par `flask-artisan new` ;
 - une classe `Application` qui **est** un Flask ;
 - un conteneur de services, des service providers, une config à la Laravel, des façades et quelques helpers.
 
@@ -17,14 +17,14 @@ Public visé : un développeur Python (souvent venant de Laravel) qui veut déma
 
 ## Objectifs
 
-1. Installer le package puis `artisan new blog && cd blog && flask run` donne une application qui répond. **Pas de publication PyPI dans ce chantier** (décision de Pierre : publication à la fin de la v0.1) ; l'objectif est vérifié avec un wheel construit localement, et le `requirements.txt` du squelette pointe vers `flask-artisan @ git+https://github.com/ahoblepierre/flask-artisan` jusqu'à la publication.
+1. Installer le package puis `flask-artisan new blog && cd blog && flask run` donne une application qui répond. **Pas de publication PyPI dans ce chantier** (décision de Pierre : publication à la fin de la v0.1) ; l'objectif est vérifié avec un wheel construit localement, et le `requirements.txt` du squelette pointe vers `flask-artisan @ git+https://github.com/ahoblepierre/flask-artisan` jusqu'à la publication.
 2. Un développeur Laravel reconnaît immédiatement : `app.bind/singleton/make`, `ServiceProvider.register/boot`, `config("app.name")`, `env("APP_DEBUG")`, façades `App` et `Config`.
 3. Toute extension Flask s'installe comme d'habitude (`ext.init_app(app)`), typiquement dans un provider.
 4. Package testé (pytest) et CI GitHub Actions dès ce chantier.
 
 ## Non-objectifs (chantiers suivants)
 
-Routage à la Laravel et controllers en classes (2), ORM et migrations (3), auth (4), commandes `make:*`, `serve`, `migrate` (5). Validation, events, mail, cache, queues : après v0.1.
+Routage à la Laravel et controllers en classes (2), ORM et migrations (3), auth (4), commandes `flask make:*`, `flask migrate`, `flask route:list` (5). Validation, events, mail, cache, queues : après v0.1.
 
 Pas non plus dans ce chantier : bindings à portée de requête, cache des façades, `Facade.fake()`, alias du conteneur, `app.call()` (injection dans les fonctions — arrive avec le chantier 2 qui en a besoin).
 
@@ -48,7 +48,7 @@ Pas non plus dans ce chantier : bindings à portée de requête, cache des faça
 
 ```
 flask-artisan/
-├── pyproject.toml            # package "flask-artisan", entry point `artisan`
+├── pyproject.toml            # package "flask-artisan", entry point `flask-artisan`
 ├── src/flask_artisan/
 │   ├── __init__.py           # exporte Application, ServiceProvider, Facade, app, config, env, base_path
 │   ├── container.py          # Container, BindingResolutionError
@@ -58,8 +58,8 @@ flask-artisan/
 │   ├── env.py                # env() + chargement .env
 │   ├── helpers.py            # app(), config(), base_path()
 │   ├── facades.py            # Facade, App, Config
-│   ├── cli.py                # `artisan new`
-│   └── skeleton/             # squelette copié par `artisan new` (données du package)
+│   ├── cli.py                # `flask-artisan new`
+│   └── skeleton/             # squelette copié par `flask-artisan new` (données du package)
 ├── tests/
 ├── docs/
 └── .github/workflows/ci.yml
@@ -104,7 +104,7 @@ Au constructeur, dans cet ordre :
 
 **Mode debug sous `flask run`** : la CLI Flask écrase `app.debug` avec `FLASK_DEBUG` après chargement de l'app, donc le pont `DEBUG` ne suffit pas. Le `.env` généré contient `FLASK_DEBUG=${APP_DEBUG}` (interpolation de python-dotenv, que la CLI Flask charge avant l'app) : `APP_DEBUG` reste la seule valeur à changer. Le pont `DEBUG` couvre les serveurs WSGI (gunicorn…). Un test vérifie le chemin réel via le `FlaskGroup`/`ScriptInfo` de Flask, pas seulement `Application(...)`. *(Décision de Claude.)*
 
-Si `app.key` est vide, le constructeur lève une erreur explicite (« APP_KEY manquant dans .env »). `artisan new` la génère, donc ça n'arrive qu'en cas d'oubli.
+Si `app.key` est vide, le constructeur lève une erreur explicite (« APP_KEY manquant dans .env »). `flask-artisan new` la génère, donc ça n'arrive qu'en cas d'oubli.
 
 Autres méthodes : `register(provider_class)` (si l'app est déjà bootée, boote aussi ce provider), `boot()` (idempotent), `base_path(path="")`, `config_path(path="")`, `app_path(path="")`, `environment()` → `config("app.env")`.
 
@@ -147,7 +147,7 @@ Le métaclasse redirige tout accès d'attribut vers l'objet résolu. Pas de cach
 
 `app(abstract=None, **params)` (sans argument : l'application ; sinon `make`), `config(key=None, default=None)` (sans argument : le `Repository`), `env(...)`, `base_path(path="")`. Erreur claire si aucune application n'a été créée.
 
-### Squelette et `artisan new`
+### Squelette et `flask-artisan new`
 
 Squelette généré :
 
@@ -164,7 +164,7 @@ blog/
 
 En attendant le routage du chantier 2, `AppServiceProvider.boot()` déclare une route `/` de démonstration avec le `@app.route` Flask standard (renvoie le nom de l'app) — ce qui montre aussi que Flask « nu » marche.
 
-`artisan new <nom>` (click, déjà dépendance de Flask) :
+`flask-artisan new <nom>` (click, déjà dépendance de Flask) :
 
 - refuse si le dossier existe et n'est pas vide ;
 - copie `skeleton/` ;
@@ -174,7 +174,7 @@ En attendant le routage du chantier 2, `AppServiceProvider.boot()` déclare une 
 ### Dépendances et outillage
 
 - Python ≥ 3.10. Dépendances : `flask>=3`, `python-dotenv`. Rien d'autre dans le cœur (JWT, Talisman, WTF, Login, SQLAlchemy reviendront dans leurs chantiers respectifs).
-- `pyproject.toml` (setuptools), version `0.1.0.dev0`, entry point `artisan = flask_artisan.cli:main`, `skeleton/` inclus comme données du package.
+- `pyproject.toml` (setuptools), version `0.1.0.dev0`, entry point `flask-artisan = flask_artisan.cli:main`, `skeleton/` inclus comme données du package.
 - Dev : `pytest`, `ruff` (lint + format) en extra `dev`.
 - CI GitHub Actions : ruff + pytest sur Python 3.10 à 3.13.
 
@@ -185,11 +185,11 @@ En attendant le routage du chantier 2, `AppServiceProvider.boot()` déclare une 
 - `env()` : chaque conversion.
 - Application : est une instance de `Flask` ; pont `SECRET_KEY`/`DEBUG`/`config/flask.py` ; ordre register-puis-boot ; provider enregistré après boot est booté ; erreur si `APP_KEY` absent.
 - Façades et helpers : résolution, erreur sans application.
-- `artisan new` : génère le projet dans `tmp_path`, `.env` contient une clé, refus sur dossier non vide ; le projet généré démarre et `GET /` répond 200 (via le client de test Flask).
+- `flask-artisan new` : génère le projet dans `tmp_path`, `.env` contient une clé, refus sur dossier non vide ; le projet généré démarre et `GET /` répond 200 (via le client de test Flask).
 
 ### Documentation
 
-README réécrit : pitch (« Laravel, mais c'est du Flask »), installation, `artisan new`, conteneur/providers/config/façades en exemples courts, état de la feuille de route. `CONTRIBUTING.md` court : installation dev, lancer tests et ruff, conventions issues/branches/PR du `CLAUDE.md`.
+README réécrit : pitch (« Laravel, mais c'est du Flask »), installation, `flask-artisan new`, conteneur/providers/config/façades en exemples courts, état de la feuille de route. `CONTRIBUTING.md` court : installation dev, lancer tests et ruff, conventions issues/branches/PR du `CLAUDE.md`.
 
 ## Laissé au builder
 

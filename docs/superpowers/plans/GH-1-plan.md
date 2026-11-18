@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Remplacer l'ébauche par un package pip `flask-artisan` (Application = Flask + conteneur, providers, config, env, façades, helpers) et une commande `artisan new` qui génère un projet prêt à `flask run`.
+**Goal:** Remplacer l'ébauche par un package pip `flask-artisan` (Application = Flask + conteneur, providers, config, env, façades, helpers) et une commande `flask-artisan new` qui génère un projet prêt à `flask run`.
 
-**Architecture:** `Application` hérite de `Flask` et de `Container`. Au constructeur : `.env` → `Repository` de config → pont vers `app.config` → enregistrement dans le conteneur → providers (register puis boot). Façades et helpers résolvent via `Application.get_instance()`. Le squelette de projet vit dans `src/flask_artisan/skeleton/` et est copié par `artisan new`.
+**Architecture:** `Application` hérite de `Flask` et de `Container`. Au constructeur : `.env` → `Repository` de config → pont vers `app.config` → enregistrement dans le conteneur → providers (register puis boot). Façades et helpers résolvent via `Application.get_instance()`. Le squelette de projet vit dans `src/flask_artisan/skeleton/` et est copié par `flask-artisan new`.
 
 **Tech Stack:** Python ≥ 3.10, Flask ≥ 3, python-dotenv, click (fourni par Flask), pytest, ruff, setuptools (pyproject), GitHub Actions.
 
@@ -15,7 +15,7 @@
 - Branche `feat/1-socle` ; chaque message de commit se termine par `(#1)`.
 - `requires-python = ">=3.10"` ; dépendances runtime : `flask>=3.0`, `python-dotenv>=1.0` — **rien d'autre**.
 - Extra `dev` : `pytest>=8`, `ruff>=0.6`.
-- Version `0.1.0.dev0`, nom de distribution `flask-artisan`, package d'import `flask_artisan`, entry point `artisan = flask_artisan.cli:main`.
+- Version `0.1.0.dev0`, nom de distribution `flask-artisan`, package d'import `flask_artisan`, entry point `flask-artisan = flask_artisan.cli:main`.
 - Noms d'API repris de Laravel : `bind`, `singleton`, `instance`, `make`, `bound`, `register`, `boot`, `config()`, `env()`, `app()`, `base_path()`.
 - Pas de publication PyPI ; le `requirements.txt` du squelette contient `flask-artisan @ git+https://github.com/ahoblepierre/flask-artisan`.
 - Messages d'erreur destinés aux utilisateurs en français.
@@ -231,14 +231,14 @@ def test_load_env_file_missing_is_silent(tmp_path):
 
 ---
 
-### Task 6: Squelette et `artisan new`
+### Task 6: Squelette et `flask-artisan new`
 
 **Files:**
-- Create: `src/flask_artisan/cli.py`, `src/flask_artisan/skeleton/` (arborescence de la spec, section « Squelette et `artisan new` »), `tests/test_cli.py`
+- Create: `src/flask_artisan/cli.py`, `src/flask_artisan/skeleton/` (arborescence de la spec, section « Squelette et `flask-artisan new` »), `tests/test_cli.py`
 
 **Interfaces:**
 - Consumes: tout ce qui précède, via le projet généré.
-- Produces: `main()` (groupe click `artisan`) avec la commande `new NAME`.
+- Produces: `main()` (groupe click `flask-artisan`) avec la commande `new NAME`.
 
 Contenu fixé du squelette :
 - `.env.example` : `APP_NAME=`, `APP_ENV=local`, `APP_DEBUG=true`, `APP_KEY=`, `FLASK_DEBUG=${APP_DEBUG}`.
@@ -266,9 +266,9 @@ Contenu fixé du squelette :
 
 - [ ] **Step 4: Vérifier** : `pytest` → tout passe.
 
-- [ ] **Step 5: Vérifier le wheel** : `pip wheel . --no-deps -w /tmp/lf-wheel && unzip -l /tmp/lf-wheel/flask_artisan-*.whl | grep skeleton/` → liste contient `skeleton/.env.example`, `skeleton/.gitignore`, `skeleton/wsgi.py` ; puis dans un venv neuf : `pip install /tmp/lf-wheel/flask_artisan-*.whl && artisan new /tmp/lf-demo && cd /tmp/lf-demo && flask run` → `curl http://127.0.0.1:5000/` répond `{"app": "lf-demo"}`.
+- [ ] **Step 5: Vérifier le wheel** : `pip wheel . --no-deps -w /tmp/lf-wheel && unzip -l /tmp/lf-wheel/flask_artisan-*.whl | grep skeleton/` → liste contient `skeleton/.env.example`, `skeleton/.gitignore`, `skeleton/wsgi.py` ; puis dans un venv neuf : `pip install /tmp/lf-wheel/flask_artisan-*.whl && flask-artisan new /tmp/lf-demo && cd /tmp/lf-demo && flask run` → `curl http://127.0.0.1:5000/` répond `{"app": "lf-demo"}`.
 
-- [ ] **Step 6: Commit** `feat: squelette de projet et commande artisan new (#1)`
+- [ ] **Step 6: Commit** `feat: squelette de projet et commande flask-artisan new (#1)`
 
 ---
 
@@ -278,7 +278,7 @@ Contenu fixé du squelette :
 - Modify: `README.md`, `CLAUDE.md` (section Commandes et Architecture : remplacer l'état « ébauche » par le nouveau socle ; retirer « Pièges connus de l'ébauche »)
 - Create: `CONTRIBUTING.md`
 
-- [ ] **Step 1: README** : pitch « Laravel, mais c'est du Flask », installation (via git tant que PyPI n'est pas publié), `artisan new`, exemples courts conteneur / provider / config / façade (repris des tests), feuille de route v0.1, licence MIT.
+- [ ] **Step 1: README** : pitch « Laravel, mais c'est du Flask », installation (via git tant que PyPI n'est pas publié), `flask-artisan new`, exemples courts conteneur / provider / config / façade (repris des tests), feuille de route v0.1, licence MIT.
 
 - [ ] **Step 2: CONTRIBUTING.md** : `pip install -e ".[dev]"`, `pytest`, `pytest tests/test_container.py::test_bound`, `ruff check . && ruff format .`, conventions issues / branches / PR (copiées du `CLAUDE.md`).
 
