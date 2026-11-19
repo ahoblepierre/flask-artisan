@@ -1,0 +1,7 @@
+import click
+
+
+@click.command("$command")
+def $function():
+    """Décrivez la commande ici (affiché par flask --help)."""
+    click.echo("$command : terminé.")

@@ -1,0 +1,23 @@
+class $class_name:
+    """Routes : Route.resource("...", $class_name)."""
+
+    def index(self):
+        return []
+
+    def create(self):
+        return {}
+
+    def store(self):
+        return {}, 201
+
+    def show(self, id):
+        return {"id": id}
+
+    def edit(self, id):
+        return {"id": id}
+
+    def update(self, id):
+        return {"id": id}
+
+    def destroy(self, id):
+        return "", 204

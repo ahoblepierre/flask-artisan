@@ -84,6 +84,8 @@ class Router:
         self._collecting = 0
         self._groups: list[RouteGroup] = []
         self._kernel: type[HttpKernel] = HttpKernel
+        # (route, endpoint, middlewares résolus) de chaque route poussée dans Flask : route:list.
+        self.registered: list[tuple[PendingRoute, str, list]] = []
 
     def use_kernel(self, kernel: type[HttpKernel]) -> None:
         self._kernel = kernel
@@ -169,6 +171,7 @@ class Router:
                 ) from None
             view = self._view(route, stack)
             self._app.add_url_rule(route.rule, endpoint, view, methods=route.methods)
+            self.registered.append((route, endpoint, stack))
 
     def _add(self, rule: str, methods: list[str], handler) -> PendingRoute:
         if not self._collecting:
