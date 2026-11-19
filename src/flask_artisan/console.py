@@ -1,4 +1,6 @@
+import importlib
 import re
+import sys
 from pathlib import Path
 from string import Template
 
@@ -133,4 +135,45 @@ COMMANDS = [make_controller, make_model, make_middleware, make_provider, make_co
 
 
 class ArtisanGroup(AppGroup):
-    """Le groupe `app.cli` : commandes du framework, puis celles du projet."""
+    """Le groupe `app.cli` : commandes du framework, puis celles de app/console/commands.
+
+    Les commandes du projet ne sont importées que lorsque `flask` en a besoin : un fichier
+    cassé ne doit pas empêcher l'app web de démarrer.
+    """
+
+    def __init__(self, *args, app, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._app = app
+        self._discovered = False
+
+    def list_commands(self, ctx):
+        self._discover()
+        return super().list_commands(ctx)
+
+    def get_command(self, ctx, name):
+        self._discover()
+        return super().get_command(ctx, name)
+
+    def _discover(self) -> None:
+        if self._discovered:
+            return
+        self._discovered = True
+        folder = self._app.app_path("console/commands")
+        if not folder.is_dir():
+            return
+        root = str(self._app.base_path())
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        for file in sorted(folder.glob("*.py")):
+            if file.stem == "__init__":
+                continue
+            try:
+                module = importlib.import_module(f"app.console.commands.{file.stem}")
+            except Exception as exc:
+                raise click.ClickException(
+                    f"Erreur dans app/console/commands/{file.name} : {exc}"
+                ) from exc
+            for value in vars(module).values():
+                if isinstance(value, click.Command):
+                    value.callback = with_appcontext(value.callback)
+                    self.add_command(value)

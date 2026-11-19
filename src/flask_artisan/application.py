@@ -43,7 +43,7 @@ class Application(Flask, Container):
         self.instance(Router, router)
         Application.set_instance(self)
 
-        self.cli = ArtisanGroup(self.name)
+        self.cli = ArtisanGroup(self.name, app=self)
         for command in COMMANDS:
             self.cli.add_command(command)
 
