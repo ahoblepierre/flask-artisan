@@ -1,17 +1,30 @@
+import hashlib
+import hmac
 from functools import cache
 
-from flask import g, has_app_context, has_request_context, request, session
+from flask import has_request_context, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from flask_artisan.auth.authenticatable import AuthenticationError
 from flask_artisan.auth.tokens import find_token
 
 SESSION_KEY = "_auth_user_id"
+# Empreinte du hash du mot de passe : changer le mot de passe (ou réutiliser l'id) coupe la session.
+SESSION_HASH_KEY = "_auth_password_hash"
 
 
 @cache
 def _dummy_hash() -> str:
     return generate_password_hash("dummy-password")
+
+
+def _state() -> dict:
+    """État d'auth de la requête (pas de `g`, partagé si un app context englobe plusieurs requêtes)."""
+    return request.environ.setdefault("flask_artisan.auth", {})
+
+
+def _fingerprint(user) -> str:
+    return hashlib.sha256((user.password or "").encode()).hexdigest()
 
 
 class Guard:
@@ -24,13 +37,14 @@ class Guard:
     def user(self):
         if not has_request_context():
             return None
-        key = f"_auth_user_{self.name}"
-        if key not in g:
-            setattr(g, key, self._resolve())
-        return getattr(g, key)
+        state = _state()
+        key = f"user:{self.name}"
+        if key not in state:
+            state[key] = self._resolve()
+        return state[key]
 
     def _remember(self, user) -> None:
-        setattr(g, f"_auth_user_{self.name}", user)
+        _state()[f"user:{self.name}"] = user
 
     def id(self):
         user = self.user()
@@ -45,8 +59,10 @@ class Guard:
     def validate(self, **credentials):
         """L'utilisateur si les identifiants sont bons, sinon None ; ne connecte personne."""
         password = credentials.pop("password", None)
-        # where(col, None) deviendrait IS NULL : un identifiant absent ne trouve personne.
-        if password is None or not credentials or None in credentials.values():
+        # Frontière de confiance (JSON du client) : que des chaînes. None deviendrait IS NULL.
+        if not credentials or not all(
+            isinstance(v, str) for v in (password, *credentials.values())
+        ):
             return None
         query = self.model.query()
         for key, value in credentials.items():
@@ -64,7 +80,11 @@ class Guard:
 class SessionGuard(Guard):
     def _resolve(self):
         user_id = session.get(SESSION_KEY)
-        return None if user_id is None else self.model.find(user_id)
+        user = None if user_id is None else self.model.find(user_id)
+        expected = session.get(SESSION_HASH_KEY, "")
+        if user is None or not hmac.compare_digest(_fingerprint(user), expected):
+            return None
+        return user
 
     def attempt(self, **credentials) -> bool:
         user = self.validate(**credentials)
@@ -75,6 +95,7 @@ class SessionGuard(Guard):
     def login(self, user) -> None:
         session.clear()  # contre la fixation de session : un cookie Flask n'a pas d'id à régénérer
         session[SESSION_KEY] = user.id
+        session[SESSION_HASH_KEY] = _fingerprint(user)
         self._remember(user)
 
     def logout(self) -> None:
@@ -121,8 +142,8 @@ class AuthManager:
 
     def guard(self, name: str | None = None) -> Guard:
         config = self._app.make("config")
-        if name is None and has_app_context():
-            name = g.get("_auth_guard")
+        if name is None and has_request_context():
+            name = _state().get("guard")
         name = name or config.get("auth.defaults.guard")
         guards = config.get("auth.guards", {})
         if name not in guards:
@@ -144,7 +165,7 @@ class AuthManager:
     def should_use(self, name: str) -> None:
         """Guard par défaut pour la requête courante (comme shouldUse de Laravel)."""
         self.guard(name)
-        g._auth_guard = name
+        _state()["guard"] = name
 
     def __getattr__(self, name: str):
         if name in RELAYED:

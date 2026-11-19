@@ -132,6 +132,8 @@ with app.app_context():
 c = app.test_client()
 assert c.post("/api/login", json={"email": "a@x", "password": "bad"}).status_code == 401
 assert c.post("/api/login").status_code == 401
+assert c.post("/api/login", json=[1]).status_code == 401
+assert c.post("/api/login", json={"email": "a@x", "password": 1}).status_code == 401
 r = c.post("/api/login", json={"email": "a@x", "password": "secret"})
 assert r.status_code == 200, r.data
 auth = {"Authorization": "Bearer " + r.get_json()["token"]}

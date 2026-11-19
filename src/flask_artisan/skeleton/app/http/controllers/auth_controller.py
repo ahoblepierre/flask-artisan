@@ -5,7 +5,9 @@ from flask_artisan import Auth
 
 class AuthController:
     def login(self):
-        data = request.get_json(silent=True) or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            data = {}
         user = Auth.validate(email=data.get("email"), password=data.get("password"))
         if user is None:
             return {"message": "Invalid credentials."}, 401

@@ -33,9 +33,13 @@ def issue_token(user_id: int, name: str) -> str:
 
 
 def find_token(plain: str) -> PersonalAccessToken | None:
-    """Le token correspondant à `"<id>|<secret>"`, sinon None ; met à jour `last_used_at`."""
+    """Le token correspondant à `"<id>|<secret>"`, sinon None ; met à jour `last_used_at`.
+
+    Attention : valide toute la session en cours (comme `save()`).
+    """
     token_id, _, secret = (plain or "").partition("|")
-    if not token_id.isdigit() or not secret:
+    # isascii : "²".isdigit() est vrai ; 18 chiffres tiennent dans un BIGINT.
+    if not (token_id.isascii() and token_id.isdigit()) or len(token_id) > 18 or not secret:
         return None
     row = PersonalAccessToken.find(int(token_id))
     if row is None or not hmac.compare_digest(row.token, _digest(secret)):

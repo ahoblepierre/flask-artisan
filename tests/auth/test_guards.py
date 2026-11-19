@@ -144,3 +144,27 @@ def test_user_outside_request_is_none(app):
 def test_provider_without_auth_config_fails(db_app):
     with pytest.raises(AuthenticationError, match="config/auth.py"):
         db_app("flask_artisan.auth.AuthServiceProvider")
+
+
+@pytest.mark.parametrize(
+    "creds",
+    [
+        {"email": "m@x", "password": 123},
+        {"email": ["m@x"], "password": "secret"},
+        {"email": {"a": 1}, "password": "secret"},
+    ],
+)
+def test_validate_non_string_credentials_is_none(app, member, creds):
+    with app.test_request_context():
+        assert Auth.validate(**creds) is None
+
+
+def test_password_change_ends_existing_sessions(app, member):
+    with app.test_request_context():
+        Auth.login(member)
+        saved = dict(session)
+    with app.test_request_context():
+        AMember.find(member.id).update(password="changed")
+    with app.test_request_context():
+        session.update(saved)
+        assert Auth.user() is None

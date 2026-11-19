@@ -1,10 +1,14 @@
+import re
+
+from sqlalchemy import delete
 from sqlalchemy.orm import validates
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from flask_artisan.auth.tokens import PersonalAccessToken, issue_token
+from flask_artisan.database.model import _db
 
-# Préfixes des hash Werkzeug : une valeur déjà hachée n'est pas re-hachée.
-HASH_PREFIXES = ("scrypt:", "pbkdf2:")
+# Hash Werkzeug complet (méthode$sel$hex) : une valeur déjà hachée n'est pas re-hachée.
+WERKZEUG_HASH = re.compile(r"(scrypt|pbkdf2):[^$]+\$[^$]+\$[0-9a-f]+")
 
 
 class AuthenticationError(Exception):
@@ -16,7 +20,7 @@ class Authenticatable:
 
     @validates("password")
     def _hash_password(self, key, value):
-        if value is None or value.startswith(HASH_PREFIXES):
+        if value is None or WERKZEUG_HASH.fullmatch(value):
             return value
         return generate_password_hash(value)
 
@@ -30,6 +34,13 @@ class HasApiTokens:
     def create_token(self, name: str) -> str:
         """Renvoie le token en clair `"<id>|<secret>"` : c'est la seule fois où il est visible."""
         return issue_token(self.id, name)
+
+    def _hard_delete(self) -> None:
+        # Sinon, sous SQLite, un nouvel utilisateur qui reprend cet id hériterait des tokens.
+        _db().session.execute(
+            delete(PersonalAccessToken).where(PersonalAccessToken.user_id == self.id)
+        )
+        super()._hard_delete()
 
     def tokens(self):
         return PersonalAccessToken.where("user_id", self.id)

@@ -114,3 +114,12 @@ def test_unknown_guard_param_raises_on_request(client_for):
     client, _, _ = client_for(lambda: Route.get("/me", me).middleware("auth:nope"))
     with pytest.raises(AuthenticationError, match="nope"):
         client.get("/me")
+
+
+def test_cached_user_does_not_leak_under_outer_app_context(client_for, auth_app):
+    client, _, token = client_for(lambda: Route.get("/api/me", me).middleware("auth:api"))
+    with client.application.app_context():
+        assert (
+            client.get("/api/me", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+        )
+        assert client.get("/api/me", headers={"Accept": "application/json"}).status_code == 401

@@ -38,7 +38,9 @@ def test_find_token_returns_row_and_touches_last_used(user):
     assert PersonalAccessToken.find(found.id).last_used_at is not None
 
 
-@pytest.mark.parametrize("plain", ["abc", "1|", "x|y", "999|secret", "", "WRONG"])
+@pytest.mark.parametrize(
+    "plain", ["abc", "1|", "x|y", "999|secret", "", "WRONG", "²|x", "99999999999999999999999|x"]
+)
 def test_find_token_rejects_malformed(user, plain):
     real = user.create_token("mobile")
     if plain == "WRONG":
@@ -62,3 +64,10 @@ def test_tokens_lists_user_tokens(user):
 
 def test_current_access_token_defaults_to_none(user):
     assert user.current_access_token() is None
+
+
+def test_hard_deleting_user_revokes_tokens(user):
+    plain = user.create_token("mobile")
+    user.delete()
+    assert find_token(plain) is None
+    assert PersonalAccessToken.count() == 0

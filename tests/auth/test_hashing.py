@@ -56,3 +56,9 @@ def test_none_stays_none(app):
     u = AUser(email="b@x", password=None)
     assert u.password is None
     assert u.check_password("x") is False
+
+
+def test_plaintext_with_hash_prefix_is_hashed(app):
+    u = AUser.create(email="a@x", password="pbkdf2:hunter2")
+    assert u.password != "pbkdf2:hunter2"
+    assert u.check_password("pbkdf2:hunter2")
