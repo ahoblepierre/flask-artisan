@@ -1,0 +1,66 @@
+name: Publish
+
+# Lancement manuel (onglet Actions) : publie sur TestPyPI pour un essai.
+# Tag v* (ex. v0.1.0) : publie sur PyPI, après approbation dans l'environnement "pypi".
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check --strict dist/*
+      - name: La version du package correspond au tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(python -c "import email,glob,zipfile; w=glob.glob('dist/*.whl')[0]; z=zipfile.ZipFile(w); m=[n for n in z.namelist() if n.endswith('METADATA')][0]; print(email.message_from_bytes(z.read(m))['Version'])")
+          echo "package $version, tag $GITHUB_REF_NAME"
+          test "v$version" = "$GITHUB_REF_NAME"
+      - name: Test de fumée du wheel
+        run: |
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install dist/*.whl
+          /tmp/smoke/bin/flask-artisan new /tmp/demo
+          cd /tmp/demo && /tmp/smoke/bin/flask route:list
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  testpypi:
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  pypi:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
