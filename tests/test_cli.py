@@ -120,4 +120,33 @@ def test_generated_project_migrates(project):
         assert result.returncode == 0, result.stdout + result.stderr
     with sqlite3.connect(project / "database" / "database.sqlite") as db:
         tables = {r[0] for r in db.execute("select name from sqlite_master where type='table'")}
-    assert "users" in tables
+    assert {"users", "personal_access_tokens"} <= tables
+
+
+AUTH_FLOW = """
+from wsgi import app
+from app.models.user import User
+
+with app.app_context():
+    User.create(name="A", email="a@x", password="secret")
+c = app.test_client()
+assert c.post("/api/login", json={"email": "a@x", "password": "bad"}).status_code == 401
+assert c.post("/api/login").status_code == 401
+r = c.post("/api/login", json={"email": "a@x", "password": "secret"})
+assert r.status_code == 200, r.data
+auth = {"Authorization": "Bearer " + r.get_json()["token"]}
+r = c.get("/api/user", headers=auth)
+assert r.status_code == 200 and r.get_json()["email"] == "a@x", r.data
+assert "password" not in r.get_json()
+assert c.post("/api/logout", headers=auth).status_code == 204
+assert c.get("/api/user", headers=auth).status_code == 401
+print("OK")
+"""
+
+
+def test_generated_api_auth_flow(project):
+    for args in (("make:migration", "init"), ("migrate",)):
+        result = run(project, "-m", "flask", *args)
+        assert result.returncode == 0, result.stdout + result.stderr
+    out = run(project, "-c", AUTH_FLOW)
+    assert out.stdout.strip() == "OK", out.stdout + out.stderr

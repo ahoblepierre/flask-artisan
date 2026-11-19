@@ -2,6 +2,7 @@ from app.providers.app_service_provider import AppServiceProvider
 from app.providers.route_service_provider import RouteServiceProvider
 
 from flask_artisan import env
+from flask_artisan.auth import AuthServiceProvider
 from flask_artisan.database import DatabaseServiceProvider
 
 config = {
@@ -12,6 +13,7 @@ config = {
     # Enregistrés dans l'ordre (register), puis tous bootés (boot).
     "providers": [
         DatabaseServiceProvider,
+        AuthServiceProvider,
         AppServiceProvider,
         RouteServiceProvider,
     ],
