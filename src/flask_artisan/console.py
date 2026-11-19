@@ -126,12 +126,44 @@ def make_command(name, command_name, force):
     )
 
 
+@click.command("route:list")
+@with_appcontext
+def route_list():
+    """Liste les routes déclarées avec Route : méthodes, URI, nom, action, middlewares."""
+    from flask_artisan.routing import Router
+
+    rows = []
+    for route, _endpoint, stack in current_app.make(Router).registered:
+        cls, target = route.handler
+        action = f"{cls.__name__}@{target}" if cls else target.__name__
+        middlewares = ", ".join(
+            m.__name__ + (":" + ",".join(params) if params else "") for m, params in stack
+        )
+        name = route.endpoint_name or ""
+        rows.append(("|".join(route.methods), route.rule, name, action, middlewares))
+    if not rows:
+        click.echo("Aucune route déclarée.")
+        return
+    rows.sort(key=lambda r: (r[1], r[0]))
+    rows.insert(0, ("Méthodes", "URI", "Nom", "Action", "Middlewares"))
+    widths = [max(len(r[i]) for r in rows) for i in range(5)]
+    for row in rows:
+        click.echo("   ".join(cell.ljust(w) for cell, w in zip(row, widths)).rstrip())
+
+
 def _import_line(path: Path, cls: str) -> str:
     module = ".".join(path.relative_to(current_app.base_path()).with_suffix("").parts)
     return f"from {module} import {cls}"
 
 
-COMMANDS = [make_controller, make_model, make_middleware, make_provider, make_command]
+COMMANDS = [
+    make_controller,
+    make_model,
+    make_middleware,
+    make_provider,
+    make_command,
+    route_list,
+]
 
 
 class ArtisanGroup(AppGroup):
