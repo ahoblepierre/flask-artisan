@@ -1,0 +1,73 @@
+import re
+from pathlib import Path
+from string import Template
+
+import click
+from flask import current_app
+from flask.cli import AppGroup, with_appcontext
+
+STUBS = Path(__file__).parent / "stubs"
+
+
+def class_to_file(name: str) -> str:
+    """CamelCase → snake_case, sigles compris : HTTPClient → http_client."""
+    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", "_", name).lower()
+
+
+def split_name(name: str, allow_dirs: bool) -> tuple[list[str], str]:
+    """ "Admin/UserController" → (["admin"], "UserController")."""
+    *dirs, cls = name.split("/")
+    if dirs and not allow_dirs:
+        raise click.BadParameter(
+            f"'{name}' : les sous-dossiers ne sont pas pris en charge ici "
+            "(seul le premier niveau du dossier est chargé)."
+        )
+    for part in [*dirs, cls]:
+        if not part.isidentifier():
+            raise click.BadParameter(f"'{name}' : '{part}' n'est pas un nom Python valide.")
+    if not cls[0].isupper():
+        raise click.BadParameter(f"'{name}' : un nom de classe commence par une majuscule.")
+    return [class_to_file(d) for d in dirs], cls
+
+
+def write_stub(
+    folder: str, name: str, stub: str, *, force: bool, allow_dirs: bool = True, **values
+) -> Path:
+    """Écrit `stubs/<stub>.stub` dans `<projet>/<folder>/…/<nom>.py` et renvoie le chemin."""
+    dirs, cls = split_name(name, allow_dirs)
+    root = current_app.base_path()
+    target = root / folder
+    for part in dirs:
+        target = target / part
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "__init__.py").touch()
+    target.mkdir(parents=True, exist_ok=True)
+    path = target / f"{class_to_file(cls)}.py"
+    relative = path.relative_to(root).as_posix()
+    if path.exists() and not force:
+        raise click.ClickException(f"Le fichier {relative} existe déjà (--force pour l'écraser).")
+    source = Template((STUBS / f"{stub}.stub").read_text())
+    path.write_text(source.substitute(class_name=cls, **values))
+    click.echo(f"Créé : {relative}")
+    return path
+
+
+force_option = click.option("--force", is_flag=True, help="Écrase le fichier s'il existe.")
+
+
+@click.command("make:controller")
+@click.argument("name")
+@click.option("--resource", is_flag=True, help="Les 7 méthodes de Route.resource.")
+@force_option
+@with_appcontext
+def make_controller(name, resource, force):
+    """Crée un controller dans app/http/controllers."""
+    stub = "controller.resource" if resource else "controller"
+    write_stub("app/http/controllers", name, stub, force=force)
+
+
+COMMANDS = [make_controller]
+
+
+class ArtisanGroup(AppGroup):
+    """Le groupe `app.cli` : commandes du framework, puis celles du projet."""

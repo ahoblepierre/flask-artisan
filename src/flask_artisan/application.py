@@ -5,6 +5,7 @@ from pathlib import Path
 from flask import Flask, current_app, has_app_context
 
 from flask_artisan.config import Repository
+from flask_artisan.console import COMMANDS, ArtisanGroup
 from flask_artisan.container import Container
 from flask_artisan.env import load_env_file
 from flask_artisan.providers import ServiceProvider
@@ -41,6 +42,10 @@ class Application(Flask, Container):
         self.instance("router", router)
         self.instance(Router, router)
         Application.set_instance(self)
+
+        self.cli = ArtisanGroup(self.name)
+        for command in COMMANDS:
+            self.cli.add_command(command)
 
         # Dans son propre contexte : façades et helpers visent cette app, même si une autre
         # app a un contexte actif (fixtures de tests).
