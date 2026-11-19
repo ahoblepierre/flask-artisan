@@ -1,12 +1,14 @@
 import hashlib
 import hmac
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import String, update
 
 from flask_artisan.database import Mapped, Model, column
 from flask_artisan.database.model import _commit, _db
+
+LAST_USED_THROTTLE = timedelta(minutes=1)
 
 
 class PersonalAccessToken(Model):
@@ -33,23 +35,32 @@ def issue_token(user_id: int, name: str) -> str:
 
 
 def find_token(plain: str) -> PersonalAccessToken | None:
-    """Le token correspondant à `"<id>|<secret>"`, sinon None ; met à jour `last_used_at`.
+    """Le token correspondant à `"<id>|<secret>"`, sinon None.
 
-    Attention : valide toute la session en cours (comme `save()`).
+    Met à jour `last_used_at` au plus une fois par minute, et jamais si la session a des
+    changements en attente (on ne valide pas le travail du handler à sa place).
     """
     token_id, _, secret = (plain or "").partition("|")
     # isascii : "²".isdigit() est vrai ; 18 chiffres tiennent dans un BIGINT.
     if not (token_id.isascii() and token_id.isdigit()) or len(token_id) > 18 or not secret:
         return None
-    row = PersonalAccessToken.find(int(token_id))
+    db = _db()
+    # Avant toute requête : une transaction ouverte ou des changements en attente
+    # appartiennent au handler, on ne les valide pas à sa place.
+    busy = db.session.in_transaction() or db.session.new or db.session.dirty or db.session.deleted
+    with db.session.no_autoflush:
+        row = PersonalAccessToken.find(int(token_id))
     if row is None or not hmac.compare_digest(row.token, _digest(secret)):
         return None
+    now = datetime.now(timezone.utc)
+    last = row.last_used_at
+    if last is not None and last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)  # SQLite relit les dates sans fuseau
+    if busy or (last is not None and now - last < LAST_USED_THROTTLE):
+        return row
     # UPDATE direct : save() toucherait updated_at.
-    db = _db()
     db.session.execute(
-        update(PersonalAccessToken)
-        .where(PersonalAccessToken.id == row.id)
-        .values(last_used_at=datetime.now(timezone.utc))
+        update(PersonalAccessToken).where(PersonalAccessToken.id == row.id).values(last_used_at=now)
     )
     _commit(db)
     return row

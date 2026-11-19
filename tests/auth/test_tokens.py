@@ -71,3 +71,42 @@ def test_hard_deleting_user_revokes_tokens(user):
     user.delete()
     assert find_token(plain) is None
     assert PersonalAccessToken.count() == 0
+
+
+def _set_last_used(token_id, value):
+    from sqlalchemy import update
+
+    DB.session.execute(
+        update(PersonalAccessToken)
+        .where(PersonalAccessToken.id == token_id)
+        .values(last_used_at=value)
+    )
+    DB.session.commit()
+    DB.remove()
+
+
+def test_last_used_at_is_throttled_to_one_minute(user):
+    from datetime import datetime, timedelta, timezone
+
+    plain = user.create_token("mobile")
+    token_id = int(plain.split("|")[0])
+    recent = datetime.now(timezone.utc) - timedelta(seconds=30)
+    _set_last_used(token_id, recent)
+    find_token(plain)
+    DB.remove()
+    stored = PersonalAccessToken.find(token_id).last_used_at
+    assert stored.replace(tzinfo=None) == recent.replace(tzinfo=None)
+
+    _set_last_used(token_id, recent - timedelta(minutes=2))
+    find_token(plain)
+    DB.remove()
+    stored = PersonalAccessToken.find(token_id).last_used_at.replace(tzinfo=timezone.utc)
+    assert stored > recent
+
+
+def test_find_token_never_commits_pending_changes(user):
+    plain = user.create_token("mobile")
+    user.email = "changed@x"  # modifié, pas sauvé
+    assert find_token(plain) is not None
+    DB.remove()  # fin de requête : rollback de ce qui n'a pas été sauvé
+    assert ATokenUser.find(user.id).email == "a@x"

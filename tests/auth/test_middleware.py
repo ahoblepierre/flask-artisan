@@ -54,6 +54,10 @@ def test_auth_api_with_bearer_sets_default_guard(client_for):
     response = client.get("/api/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert response.get_json()["id"] == member.id
+    with client.application.app_context():
+        from flask_artisan.auth import PersonalAccessToken
+
+        assert PersonalAccessToken.find(int(token.split("|")[0])).last_used_at is not None
 
 
 def test_auth_multiple_guards(client_for):
@@ -123,3 +127,24 @@ def test_cached_user_does_not_leak_under_outer_app_context(client_for, auth_app)
             client.get("/api/me", headers={"Authorization": f"Bearer {token}"}).status_code == 200
         )
         assert client.get("/api/me", headers={"Accept": "application/json"}).status_code == 401
+
+
+def test_token_only_guards_always_answer_json(client_for):
+    def routes():
+        Route.get("/login", lambda: "form").name("login")
+        Route.get("/api/me", me).middleware("auth:api")
+
+    client, _, _ = client_for(routes)
+    response = client.get("/api/me", headers={"Accept": "*/*"})
+    assert response.status_code == 401
+    assert response.get_json() == {"message": "Unauthenticated."}
+
+
+def test_login_route_needing_params_gives_401_not_500(client_for):
+    def routes():
+        Route.get("/<lang>/login", lambda lang: "form").name("login")
+        Route.get("/me", me).middleware("auth")
+
+    client, _, _ = client_for(routes)
+    response = client.get("/me", headers={"Accept": "text/html"})
+    assert response.status_code == 401
