@@ -1,2 +1,2 @@
-flask-artisan @ git+https://github.com/ahoblepierre/flask-artisan
+flask-artisan>=0.1,<0.2
 pytest
