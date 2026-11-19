@@ -239,7 +239,7 @@ curl -X POST localhost:5000/api/login -H 'Content-Type: application/json' \
 curl localhost:5000/api/user -H 'Authorization: Bearer 1|...'
 ```
 
-La session est un cookie signé avec `APP_KEY` : cette clé est obligatoire. Seul le hash SHA-256 de chaque token est stocké.
+La session est un cookie signé avec `APP_KEY` : cette clé est obligatoire. Changer le mot de passe d'un utilisateur ferme ses sessions ; un `logout` ne fait que vider le cookie du navigateur courant. Seul le hash SHA-256 de chaque token est stocké.
 
 ## Service providers
 

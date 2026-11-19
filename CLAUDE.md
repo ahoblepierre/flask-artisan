@@ -60,6 +60,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 - **Auth** ([auth/](src/flask_artisan/auth/)) : sous-paquet listé dans `packages.find`, `AuthServiceProvider` enregistre l'`AuthManager` (`"auth"`, façade `Auth`).
   - `Authenticatable` hache `password` via `@validates` de SQLAlchemy : appelé à l'affectation, jamais au chargement. Une valeur déjà hachée (`scrypt:`, `pbkdf2:`) est gardée.
   - `PersonalAccessToken` est un modèle du framework : il entre dans `Model.metadata` dès l'import de `flask_artisan.auth`. La façade `Auth` (accesseur en chaîne) n'importe pas ce sous-paquet, pour qu'un projet sans auth n'ait pas cette table.
-  - Les guards sont construits à chaque appel depuis `config/auth.py`. L'utilisateur résolu et le guard choisi par le middleware (`should_use`) vivent dans `flask.g`, donc ne fuient pas d'une requête à l'autre.
+  - Les guards sont construits à chaque appel depuis `config/auth.py`. L'utilisateur résolu et le guard choisi par le middleware (`should_use`) vivent dans `request.environ` (pas `g`, que partagent les requêtes d'un même app context englobant).
+  - La session stocke l'id et une empreinte du hash du mot de passe : changer le mot de passe coupe les sessions. Le hard delete d'un utilisateur supprime ses tokens (SQLite réutilise les id).
 - `Application.get_instance()` renvoie `current_app` pendant une requête, sinon la dernière app créée.
 - `flask run` écrase `app.debug` avec `FLASK_DEBUG` : le `.env` du squelette contient `FLASK_DEBUG=${APP_DEBUG}`. Les tests du projet généré tournent en sous-processus avec un environnement sans `FLASK_*`/`APP_*`.
