@@ -194,3 +194,23 @@ def test_make_command_rejects_keyword_function_name(artisan):
     assert result.exit_code != 0
     assert "import" in result.output
     assert not app.base_path("app/console/commands/import.py").exists()
+
+
+def test_subfolder_cannot_shadow_existing_module(artisan):
+    app, run = artisan
+    folder = app.base_path("app/http/controllers")
+    folder.mkdir(parents=True)
+    (folder / "admin.py").write_text("X = 1\n")
+    result = run("make:controller", "Admin/UserController")
+    assert result.exit_code != 0
+    assert "admin.py" in result.output
+    assert not (folder / "admin").exists()
+
+
+def test_force_on_directory_is_a_clean_error(artisan):
+    app, run = artisan
+    app.base_path("app/http/controllers/photo_controller.py").mkdir(parents=True)
+    result = run("make:controller", "PhotoController", "--force")
+    assert result.exit_code == 1
+    assert "dossier" in result.output
+    assert not isinstance(result.exception, IsADirectoryError)

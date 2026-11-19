@@ -113,3 +113,22 @@ def test_imported_commands_are_not_reregistered(project):
     assert run("--help").exit_code == 0
     assert app.cli.commands["make:model"] is make_model
     assert make_model.callback is callback
+
+
+def test_framework_commands_work_with_broken_project_file(project):
+    (project / "app" / "console" / "commands" / "broken.py").write_text(
+        "raise RuntimeError('boom')\n"
+    )
+    _, run = runner(project)
+    result = run("make:controller", "PhotoController")
+    assert result.exit_code == 0, result.output
+
+
+def test_failed_discovery_is_retried(project):
+    broken = project / "app" / "console" / "commands" / "broken.py"
+    broken.write_text("raise RuntimeError('boom')\n")
+    _, run = runner(project)
+    assert "boom" in run("app:hello").output
+    assert "boom" in run("app:hello").output
+    broken.unlink()
+    assert run("app:hello").exit_code == 0

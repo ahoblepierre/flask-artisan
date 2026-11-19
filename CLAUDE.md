@@ -63,7 +63,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
   - Les guards sont construits à chaque appel depuis `config/auth.py`. L'utilisateur résolu et le guard choisi par le middleware (`should_use`) vivent dans `request.environ` (pas `g`, que partagent les requêtes d'un même app context englobant).
   - La session stocke l'id et une empreinte du hash du mot de passe : changer le mot de passe coupe les sessions. Le hard delete d'un utilisateur supprime ses tokens (SQLite réutilise les id).
 - **Console** ([console.py](src/flask_artisan/console.py)) : `Application` remplace `app.cli` par un `ArtisanGroup` et y ajoute `make:*` et `route:list`. Les modèles de fichiers sont dans `stubs/` (`string.Template`, listés dans `package-data`).
-  - Les commandes Click de `app/console/commands/*.py` ne sont importées qu'à la première demande du CLI (`list_commands`/`get_command`) : un fichier cassé ne bloque pas l'app web. Leur callback est enveloppé dans `with_appcontext`.
+  - Les commandes Click de `app/console/commands/*.py` ne sont importées que par le CLI (`list_commands`, ou `get_command` pour un nom qui n'est pas une commande du framework) : un fichier cassé ne bloque ni l'app web ni `make:*`/`migrate`/`route:list`. Leur callback est enveloppé dans `with_appcontext`.
   - `make:model` et `make:command` refusent les sous-dossiers : `import_models` et la découverte ne lisent que le premier niveau.
   - `Router.registered` garde (route, endpoint, middlewares résolus) de chaque route poussée dans Flask, pour `route:list`.
 - `Application.get_instance()` renvoie `current_app` pendant une requête, sinon la dernière app créée.

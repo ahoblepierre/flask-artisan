@@ -259,7 +259,7 @@ Un fichier existant n'est jamais écrasé sans `--force`. `make:middleware` et `
 
 Pas de `make:model -m` : les migrations sont générées depuis les colonnes du modèle. Ajoutez-les, puis lancez `flask make:migration`.
 
-Vos commandes sont des commandes [Click](https://click.palletsprojects.com) dans `app/console/commands/`. Elles sont découvertes toutes seules et s'exécutent dans le contexte de l'application. Un fichier qui ne s'importe pas fait échouer les commandes `flask` avec son nom (sur `flask --help`, Flask affiche l'erreur mais rend la main normalement) ; l'app web, elle, n'importe jamais ces fichiers :
+Vos commandes sont des commandes [Click](https://click.palletsprojects.com) dans `app/console/commands/`. Elles sont découvertes toutes seules et s'exécutent dans le contexte de l'application. Un fichier qui ne s'importe pas fait échouer les commandes du projet avec son nom (sur `flask --help`, Flask affiche l'erreur mais rend la main normalement). Les commandes du framework (`make:*`, `migrate`, `route:list`) et l'app web ne sont pas touchées :
 
 ```python
 # app/console/commands/send_emails.py

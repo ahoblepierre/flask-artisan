@@ -183,10 +183,13 @@ def test_generated_project_console(project):
 
 def test_generated_project_broken_command_is_reported(project):
     (project / "app/console/commands/broken.py").write_text("raise RuntimeError('boom')\n")
-    # Flask attrape l'erreur pendant --help : trace affichée (code 0), commandes en échec.
+    # Flask attrape l'erreur pendant --help : trace affichée (code 0).
     result = run(project, "-m", "flask", "--help")
     assert "broken.py" in result.stdout + result.stderr
-    result = run(project, "-m", "flask", "route:list")
+    # Les commandes du framework marchent toujours, pour pouvoir réparer.
+    assert run(project, "-m", "flask", "route:list").returncode == 0
+    # Une commande du projet échoue en nommant le fichier.
+    result = run(project, "-m", "flask", "app:send-emails")
     assert result.returncode != 0
     assert "app/console/commands/broken.py" in result.stdout + result.stderr
     assert run(project, "-c", "from wsgi import app; print(app.name)").returncode == 0

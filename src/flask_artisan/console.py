@@ -44,12 +44,19 @@ def write_stub(
     root = current_app.base_path()
     target = root / folder
     for part in dirs:
+        shadowed = target / f"{part}.py"
+        if shadowed.exists():
+            raise click.ClickException(
+                f"{shadowed.relative_to(root).as_posix()} existe : un dossier {part}/ le masquerait."
+            )
         target = target / part
         target.mkdir(parents=True, exist_ok=True)
         (target / "__init__.py").touch()
     target.mkdir(parents=True, exist_ok=True)
     path = target / f"{class_to_file(cls)}.py"
     relative = path.relative_to(root).as_posix()
+    if path.is_dir():
+        raise click.ClickException(f"{relative} est un dossier, pas un fichier.")
     if path.exists() and not force:
         raise click.ClickException(f"Le fichier {relative} existe déjà (--force pour l'écraser).")
     source = Template((STUBS / f"{stub}.stub").read_text())
@@ -187,13 +194,16 @@ class ArtisanGroup(AppGroup):
         return super().list_commands(ctx)
 
     def get_command(self, ctx, name):
-        self._discover()
-        return super().get_command(ctx, name)
+        # Commandes du framework d'abord : un fichier cassé du projet ne bloque pas make:*.
+        command = super().get_command(ctx, name)
+        if command is None:
+            self._discover()
+            command = super().get_command(ctx, name)
+        return command
 
     def _discover(self) -> None:
         if self._discovered:
             return
-        self._discovered = True
         folder = self._app.app_path("console/commands")
         if not folder.is_dir():
             return
@@ -220,3 +230,4 @@ class ArtisanGroup(AppGroup):
                     value.callback = with_appcontext(value.callback)
                     value.callback._artisan_appcontext = True
                 self.add_command(value)
+        self._discovered = True  # pas avant : une découverte en échec est retentée
