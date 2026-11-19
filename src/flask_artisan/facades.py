@@ -31,3 +31,8 @@ class Route(Facade):
 
 class DB(Facade):
     accessor = "db"
+
+
+class Auth(Facade):
+    # Accesseur en chaîne : la façade n'importe pas flask_artisan.auth (ni ses tables).
+    accessor = "auth"
