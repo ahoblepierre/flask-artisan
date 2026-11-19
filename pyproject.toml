@@ -29,7 +29,7 @@ Homepage = "https://github.com/ahoblepierre/flask-artisan"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["flask_artisan", "flask_artisan.database"]
+include = ["flask_artisan", "flask_artisan.database", "flask_artisan.auth"]
 
 [tool.setuptools.package-data]
 flask_artisan = [
