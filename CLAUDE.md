@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Flask-Artisan : un framework open source qui apporte les conventions de Laravel à Flask. **Flask reste le moteur** (décision actée) : on ajoute une couche (conteneur, service providers, façades, routage à la Laravel, ORM façon Eloquent sur SQLAlchemy, auth, commandes ajoutées au CLI `flask`) sans casser la compatibilité avec l'écosystème Flask. Le différenciateur face à Masonite est justement d'être du Flask.
 
-Chantiers 1 à 4 (socle #1, routage #3, ORM #5, auth #7) mergés. Chantier 5 (CLI, #9) en cours.
+Chantiers 1 à 4 (socle #1, routage #3, ORM #5, auth #7) mergés. Chantier 5 (CLI, #9) en cours : c'est le dernier de la v0.1 avant la publication PyPI.
 
 ## Feuille de route (v0.1 publique = chantiers 1 à 5)
 
@@ -62,5 +62,9 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
   - `PersonalAccessToken` est un modèle du framework : il entre dans `Model.metadata` dès l'import de `flask_artisan.auth`. La façade `Auth` (accesseur en chaîne) n'importe pas ce sous-paquet, pour qu'un projet sans auth n'ait pas cette table.
   - Les guards sont construits à chaque appel depuis `config/auth.py`. L'utilisateur résolu et le guard choisi par le middleware (`should_use`) vivent dans `request.environ` (pas `g`, que partagent les requêtes d'un même app context englobant).
   - La session stocke l'id et une empreinte du hash du mot de passe : changer le mot de passe coupe les sessions. Le hard delete d'un utilisateur supprime ses tokens (SQLite réutilise les id).
+- **Console** ([console.py](src/flask_artisan/console.py)) : `Application` remplace `app.cli` par un `ArtisanGroup` et y ajoute `make:*` et `route:list`. Les modèles de fichiers sont dans `stubs/` (`string.Template`, listés dans `package-data`).
+  - Les commandes Click de `app/console/commands/*.py` ne sont importées qu'à la première demande du CLI (`list_commands`/`get_command`) : un fichier cassé ne bloque pas l'app web. Leur callback est enveloppé dans `with_appcontext`.
+  - `make:model` et `make:command` refusent les sous-dossiers : `import_models` et la découverte ne lisent que le premier niveau.
+  - `Router.registered` garde (route, endpoint, middlewares résolus) de chaque route poussée dans Flask, pour `route:list`.
 - `Application.get_instance()` renvoie `current_app` pendant une requête, sinon la dernière app créée.
 - `flask run` écrase `app.debug` avec `FLASK_DEBUG` : le `.env` du squelette contient `FLASK_DEBUG=${APP_DEBUG}`. Les tests du projet généré tournent en sous-processus avec un environnement sans `FLASK_*`/`APP_*`.

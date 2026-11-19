@@ -152,3 +152,30 @@ def test_generated_api_auth_flow(project):
         assert result.returncode == 0, result.stdout + result.stderr
     out = run(project, "-c", AUTH_FLOW)
     assert out.stdout.strip() == "OK", out.stdout + out.stderr
+
+
+def test_generated_project_console(project):
+    from pathlib import Path
+
+    repo_config = str(Path(__file__).resolve().parent.parent / "pyproject.toml")
+    assert (project / "app/console/commands/__init__.py").exists()
+    for args in (
+        ("make:controller", "PhotoController", "--resource"),
+        ("make:command", "SendEmails"),
+    ):
+        result = run(project, "-m", "flask", *args)
+        assert result.returncode == 0, result.stdout + result.stderr
+    result = run(project, "-m", "flask", "app:send-emails")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "app:send-emails : terminé." in result.stdout
+    result = run(project, "-m", "flask", "route:list")
+    assert result.returncode == 0, result.stdout + result.stderr
+    for text in ("api.login", "AuthController@login", "Authenticate:api"):
+        assert text in result.stdout, result.stdout
+    generated = [
+        "app/http/controllers/photo_controller.py",
+        "app/console/commands/send_emails.py",
+    ]
+    for args in (["check"], ["format", "--check"]):
+        result = run(project, "-m", "ruff", *args, "--config", repo_config, *generated)
+        assert result.returncode == 0, result.stdout + result.stderr
