@@ -1,19 +1,31 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "flask-artisan"
-version = "0.1.0.dev0"
-description = "Les conventions de Laravel pour Flask : conteneur, providers, config, façades."
+dynamic = ["version"]
+description = "Les conventions de Laravel pour Flask : conteneur, routage, ORM façon Eloquent, auth et commandes make:*."
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = ["flask>=3.0", "python-dotenv>=1.0", "sqlalchemy>=2.0", "alembic>=1.13"]
+keywords = ["flask", "laravel", "framework", "orm", "artisan"]
 classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
     "Framework :: Flask",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: WSGI :: Application",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
 ]
 
 [project.optional-dependencies]
@@ -26,10 +38,15 @@ flask-artisan = "flask_artisan.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/ahoblepierre/flask-artisan"
+Issues = "https://github.com/ahoblepierre/flask-artisan/issues"
+Changelog = "https://github.com/ahoblepierre/flask-artisan/blob/main/CHANGELOG.md"
+
+[tool.setuptools.dynamic]
+version = { attr = "flask_artisan.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["flask_artisan", "flask_artisan.database", "flask_artisan.auth"]
+include = ["flask_artisan*"]
 
 [tool.setuptools.package-data]
 flask_artisan = [

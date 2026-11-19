@@ -193,3 +193,8 @@ def test_generated_project_broken_command_is_reported(project):
     assert result.returncode != 0
     assert "app/console/commands/broken.py" in result.stdout + result.stderr
     assert run(project, "-c", "from wsgi import app; print(app.name)").returncode == 0
+
+
+def test_generated_requirements_pin_pypi_release(project):
+    requirements = (project / "requirements.txt").read_text().splitlines()
+    assert "flask-artisan>=0.1,<0.2" in requirements

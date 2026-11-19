@@ -6,12 +6,12 @@ Flask-Artisan donne une structure prête à l'emploi aux applications Flask : co
 service providers, configuration par fichiers, façades et helpers. L'application reste un vrai
 objet `Flask` : `flask run`, les extensions Flask et leur documentation fonctionnent tels quels.
 
-> Projet en cours de développement (v0.1 en préparation), pas encore publié sur PyPI.
+> Version 0.1 (alpha) : l'API peut encore changer avant la 1.0. Voir le [changelog](https://github.com/ahoblepierre/flask-artisan/blob/main/CHANGELOG.md).
 
 ## Démarrer un projet
 
 ```bash
-pip install "flask-artisan @ git+https://github.com/ahoblepierre/flask-artisan"
+pip install flask-artisan
 flask-artisan new blog
 cd blog
 pip install -r requirements.txt
@@ -330,7 +330,7 @@ class Mail(Facade):
 Mail.send(...)
 ```
 
-## Feuille de route v0.1
+## Feuille de route v0.1 (publiée)
 
 1. ✅ Socle : package, Application, conteneur, providers, config, façades
 2. ✅ Routage et middlewares (`routes/web.py`, controllers en classes)
@@ -340,7 +340,7 @@ Mail.send(...)
 
 ## Contribuer
 
-Voir [CONTRIBUTING.md](CONTRIBUTING.md).
+Voir [CONTRIBUTING.md](https://github.com/ahoblepierre/flask-artisan/blob/main/CONTRIBUTING.md).
 
 ## Licence
 
