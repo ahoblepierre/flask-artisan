@@ -106,3 +106,81 @@ def test_generated_controller_passes_ruff(artisan, extra):
     app, run = artisan
     assert run("make:controller", "PhotoController", *extra).exit_code == 0
     assert_ruff_clean(app.base_path("app/http/controllers/photo_controller.py"))
+
+
+def test_make_model(artisan):
+    from flask_artisan.database import Model
+
+    app, run = artisan
+    result = run("make:model", "ConsolePost")
+    assert result.exit_code == 0, result.output
+    module = load(app.base_path("app/models/console_post.py"))
+    assert issubclass(module.ConsolePost, Model)
+    assert 'flask make:migration "create console_posts"' in result.output
+    assert not app.base_path("database/migrations").exists()
+
+
+def test_make_middleware(artisan):
+    app, run = artisan
+    result = run("make:middleware", "BeforeMiddleware")
+    assert result.exit_code == 0, result.output
+    cls = load(app.base_path("app/http/middleware/before_middleware.py")).BeforeMiddleware
+    assert cls().handle(object(), lambda r: "ok") == "ok"
+    assert '"before_middleware": BeforeMiddleware' in result.output
+
+
+def test_make_provider(artisan):
+    from flask_artisan import ServiceProvider
+
+    app, run = artisan
+    result = run("make:provider", "PaymentServiceProvider")
+    assert result.exit_code == 0, result.output
+    module = load(app.base_path("app/providers/payment_service_provider.py"))
+    assert issubclass(module.PaymentServiceProvider, ServiceProvider)
+    assert "from app.providers.payment_service_provider import PaymentServiceProvider" in (
+        result.output
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "stem", "command"),
+    [("SendEmails", "send_emails", "app:send-emails"), ("HTTPPing", "http_ping", "app:http-ping")],
+)
+def test_make_command_default_name(artisan, name, stem, command):
+    import click
+
+    app, run = artisan
+    assert run("make:command", name).exit_code == 0
+    cmd = getattr(load(app.base_path(f"app/console/commands/{stem}.py")), stem)
+    assert isinstance(cmd, click.Command)
+    assert cmd.name == command
+
+
+def test_make_command_custom_name(artisan):
+    app, run = artisan
+    assert run("make:command", "SendEmails", "--command", "mail:send").exit_code == 0
+    cmd = load(app.base_path("app/console/commands/send_emails.py")).send_emails
+    assert cmd.name == "mail:send"
+
+
+@pytest.mark.parametrize("command", ["make:model", "make:command"])
+def test_model_and_command_refuse_subfolders(artisan, command):
+    _, run = artisan
+    result = run(command, "Billing/Invoice")
+    assert result.exit_code != 0
+    assert "sous-dossier" in result.output
+
+
+@pytest.mark.parametrize(
+    ("command", "name", "path"),
+    [
+        ("make:model", "Invoice", "app/models/invoice.py"),
+        ("make:middleware", "EnsureJson", "app/http/middleware/ensure_json.py"),
+        ("make:provider", "PaymentServiceProvider", "app/providers/payment_service_provider.py"),
+        ("make:command", "SendEmails", "app/console/commands/send_emails.py"),
+    ],
+)
+def test_generated_files_pass_ruff(artisan, command, name, path):
+    app, run = artisan
+    assert run(command, name).exit_code == 0
+    assert_ruff_clean(app.base_path(path))

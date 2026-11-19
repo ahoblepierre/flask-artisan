@@ -66,7 +66,70 @@ def make_controller(name, resource, force):
     write_stub("app/http/controllers", name, stub, force=force)
 
 
-COMMANDS = [make_controller]
+@click.command("make:model")
+@click.argument("name")
+@force_option
+@with_appcontext
+def make_model(name, force):
+    """Crée un modèle dans app/models."""
+    from flask_artisan.database.model import _table_name
+
+    write_stub("app/models", name, "model", force=force, allow_dirs=False)
+    click.echo(f'Ajoutez vos colonnes, puis : flask make:migration "create {_table_name(name)}"')
+
+
+@click.command("make:middleware")
+@click.argument("name")
+@force_option
+@with_appcontext
+def make_middleware(name, force):
+    """Crée un middleware dans app/http/middleware."""
+    path = write_stub("app/http/middleware", name, "middleware", force=force)
+    _, cls = split_name(name, allow_dirs=True)
+    click.echo(
+        f"Déclarez-le dans app/http/kernel.py :\n  {_import_line(path, cls)}\n"
+        f'  middleware = {{"{class_to_file(cls)}": {cls}}}'
+    )
+
+
+@click.command("make:provider")
+@click.argument("name")
+@force_option
+@with_appcontext
+def make_provider(name, force):
+    """Crée un service provider dans app/providers."""
+    path = write_stub("app/providers", name, "provider", force=force)
+    _, cls = split_name(name, allow_dirs=True)
+    click.echo(f'Ajoutez-le à "providers" dans config/app.py :\n  {_import_line(path, cls)}')
+
+
+@click.command("make:command")
+@click.argument("name")
+@click.option("--command", "command_name", help="Nom de la commande (défaut : app:<nom>).")
+@force_option
+@with_appcontext
+def make_command(name, command_name, force):
+    """Crée une commande du projet dans app/console/commands."""
+    _, cls = split_name(name, allow_dirs=False)
+    function = class_to_file(cls)
+    command_name = command_name or "app:" + function.replace("_", "-")
+    write_stub(
+        "app/console/commands",
+        name,
+        "command",
+        force=force,
+        allow_dirs=False,
+        command=command_name,
+        function=function,
+    )
+
+
+def _import_line(path: Path, cls: str) -> str:
+    module = ".".join(path.relative_to(current_app.base_path()).with_suffix("").parts)
+    return f"from {module} import {cls}"
+
+
+COMMANDS = [make_controller, make_model, make_middleware, make_provider, make_command]
 
 
 class ArtisanGroup(AppGroup):

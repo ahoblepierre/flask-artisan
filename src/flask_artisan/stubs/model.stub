@@ -1,0 +1,8 @@
+from flask_artisan.database import Model
+
+# Colonnes : from flask_artisan.database import Mapped, column ; puis title: Mapped[str]
+
+
+class $class_name(Model):
+    # fillable = ["title"]  # seules ces clés seront acceptées par create() / update()
+    pass

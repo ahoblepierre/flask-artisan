@@ -1,0 +1,9 @@
+from flask_artisan import Middleware
+
+
+class $class_name(Middleware):
+    def handle(self, request, next):
+        # Avant le controller : renvoyer une réponse ici court-circuite la route.
+        response = next(request)
+        # Après le controller.
+        return response

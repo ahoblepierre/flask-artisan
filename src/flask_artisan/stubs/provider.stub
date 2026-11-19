@@ -1,0 +1,11 @@
+from flask_artisan import ServiceProvider
+
+
+class $class_name(ServiceProvider):
+    def register(self):
+        # Bindings : self.app.singleton(Service, lambda app: Service(...))
+        pass
+
+    def boot(self):
+        # Code exécuté une fois tous les providers enregistrés.
+        pass
