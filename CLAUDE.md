@@ -28,6 +28,10 @@ Ce repo est public et n'utilise **pas** le Jira de l'entreprise (remplace la rè
 - Spec / plan : `docs/superpowers/specs/GH-<n°>-spec.md`, `docs/superpowers/plans/GH-<n°>-plan.md`
 - Commit et titre de PR contiennent `(#<n°>)` ; la PR ferme l'issue (`Closes #<n°>`).
 
+## Publication
+
+Version unique : `__version__` de `src/flask_artisan/__init__.py` (lu par setuptools). Publication par `.github/workflows/publish.yml` (Trusted Publishing) : lancement manuel → TestPyPI, tag `v*` → PyPI après approbation. Procédure dans CONTRIBUTING.md.
+
 ## Commandes
 
 ```bash
@@ -40,7 +44,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 
 ## Architecture
 
-- **Trois livrables distincts** : le repo (code + docs + tests), le package pip (`src/flask_artisan/` seulement) et le projet généré (copie de `src/flask_artisan/skeleton/`). Le squelette n'est pas un sous-package (`packages.find include = ["flask_artisan"]`) ; ses dotfiles sont listés explicitement dans `package-data`.
+- **Trois livrables distincts** : le repo (code + docs + tests), le package pip (`src/flask_artisan/` seulement) et le projet généré (copie de `src/flask_artisan/skeleton/`). `packages.find include = ["flask_artisan*"]` couvre tous les sous-paquets (squelette et `alembic_env` compris, sinon setuptools les livre en « données » de façon dépréciée) ; les fichiers non Python (dotfiles du squelette, `stubs/`, `alembic_env/*.mako`) sont listés dans `package-data`.
 - `Application` ([application.py](src/flask_artisan/application.py)) hérite de `Flask` **et** de `Container`. Le constructeur charge `.env`, puis `config/*.py` dans un `Repository`, fait le pont vers `app.config` (`SECRET_KEY`, `DEBUG`, contenu de `config/flask.py`), s'enregistre dans le conteneur (`"app"`, `"config"`), devient l'instance courante, puis register/boot les providers de `config("app.providers")`.
 - L'état interne du conteneur est préfixé `_container_` et deux tests garantissent qu'aucun nom ne masque un attribut de Flask : tout nouvel attribut d'`Application`/`Container` doit passer ces tests.
 - Façades et helpers résolvent via `Application.get_instance()`, sans cache. Les tests remettent l'instance à `None` (fixture autouse dans `tests/conftest.py`).
@@ -49,7 +53,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
   - À la fermeture de la fenêtre, `flush()` les pousse dans Flask avec `add_url_rule`. C'est ce qui permet à `.name()` de s'appliquer après `Route.get()`.
   - Chaque vue exécute le pipeline de middlewares résolu depuis le kernel au `flush` ([middleware.py](src/flask_artisan/middleware.py)), puis le handler via `app.make` (controller) et `app.call` (injection). Chaque résultat passe par `make_response`.
   - `RouteServiceProvider` branche le kernel dans `register()` et charge `routes/*.py` dans `boot()`.
-- **Base de données** ([database/](src/flask_artisan/database/)) : sous-paquet listé explicitement dans `packages.find`.
+- **Base de données** ([database/](src/flask_artisan/database/)) : sous-paquet.
   - `DatabaseServiceProvider` enregistre le `DatabaseManager` (`"db"`, façade `DB`), remplace `app.json` (sérialisation des modèles) et ajoute les commandes de migration à `app.cli`.
   - Le manager possède le moteur (créé à la première utilisation) et une `scoped_session` avec `expire_on_commit=False`. La session est retirée en fin de requête. `save()` valide toute la session, sauf dans `DB.transaction()`.
   - `Model.__init_subclass__` complète la classe avant le mapping : noms réservés, `__tablename__`, `id`, timestamps, conversion des marqueurs `has_many`/`belongs_to`… en `relationship()`.
@@ -57,7 +61,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
   - Le soft delete est un filtre global `with_loader_criteria` posé sur l'événement `do_orm_execute` du sessionmaker. Il est désactivé par l'option d'exécution `include_trashed`.
   - Alembic est piloté par programme : `env.py` et `script.py.mako` sont fournis par le package (`alembic_env/`), et les versions vivent dans `database/migrations/` du projet.
   - Les modèles et `Model.metadata` sont globaux au processus : les modèles de test portent des noms uniques dans toute la suite (préfixe par fichier : `QUser`, `RPost`…).
-- **Auth** ([auth/](src/flask_artisan/auth/)) : sous-paquet listé dans `packages.find`, `AuthServiceProvider` enregistre l'`AuthManager` (`"auth"`, façade `Auth`).
+- **Auth** ([auth/](src/flask_artisan/auth/)) : sous-paquet, `AuthServiceProvider` enregistre l'`AuthManager` (`"auth"`, façade `Auth`).
   - `Authenticatable` hache `password` via `@validates` de SQLAlchemy : appelé à l'affectation, jamais au chargement. Une valeur déjà hachée (`scrypt:`, `pbkdf2:`) est gardée.
   - `PersonalAccessToken` est un modèle du framework : il entre dans `Model.metadata` dès l'import de `flask_artisan.auth`. La façade `Auth` (accesseur en chaîne) n'importe pas ce sous-paquet, pour qu'un projet sans auth n'ait pas cette table.
   - Les guards sont construits à chaque appel depuis `config/auth.py`. L'utilisateur résolu et le guard choisi par le middleware (`should_use`) vivent dans `request.environ` (pas `g`, que partagent les requêtes d'un même app context englobant).
