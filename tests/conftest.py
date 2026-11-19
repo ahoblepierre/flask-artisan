@@ -60,11 +60,17 @@ def db_app(make_project):
     """App avec DatabaseServiceProvider sur SQLite (:memory: par défaut), tables créées.
 
     `providers` : chemins "module.Classe" de providers en plus ; `subdir` : projet dans un
-    sous-dossier (pour avoir deux apps distinctes dans un même test).
+    sous-dossier (pour avoir deux apps distinctes dans un même test) ; `configs` : fichiers
+    `config/<nom>.py` en plus, {nom: source}.
     """
     import shutil
 
-    def _make(*providers: str, database: str = ":memory:", subdir: str | None = None):
+    def _make(
+        *providers: str,
+        database: str = ":memory:",
+        subdir: str | None = None,
+        configs: dict | None = None,
+    ):
         names = [p.rsplit(".", 1) for p in providers]
         extra = "from flask_artisan.database import DatabaseServiceProvider\n" + "".join(
             f"from {mod} import {cls}\n" for mod, cls in names
@@ -79,6 +85,8 @@ def db_app(make_project):
             f"    'connections': {{'sqlite': {{'driver': 'sqlite', 'database': {database!r}}}}},\n"
             "}\n"
         )
+        for name, source in (configs or {}).items():
+            (root / "config" / f"{name}.py").write_text(source)
         app = Application(root)
         app.make("db").create_all()
         return app
