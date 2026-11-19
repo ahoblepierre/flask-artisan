@@ -91,7 +91,9 @@ def test_existing_file_needs_force(artisan):
     assert "class PhotoController" in path.read_text()
 
 
-@pytest.mark.parametrize("name", ["", "1Foo", "Foo-Bar", "Admin/", "../Evil", "photo"])
+@pytest.mark.parametrize(
+    "name", ["", "1Foo", "Foo-Bar", "Admin/", "../Evil", "photo", "None", "True", "class/Foo"]
+)
 def test_invalid_names_rejected(artisan, name):
     app, run = artisan
     result = run("make:controller", name)
@@ -184,3 +186,11 @@ def test_generated_files_pass_ruff(artisan, command, name, path):
     app, run = artisan
     assert run(command, name).exit_code == 0
     assert_ruff_clean(app.base_path(path))
+
+
+def test_make_command_rejects_keyword_function_name(artisan):
+    app, run = artisan
+    result = run("make:command", "Import")
+    assert result.exit_code != 0
+    assert "import" in result.output
+    assert not app.base_path("app/console/commands/import.py").exists()

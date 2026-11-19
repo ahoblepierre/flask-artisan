@@ -1,4 +1,5 @@
 import importlib
+import keyword
 import re
 import sys
 from pathlib import Path
@@ -25,8 +26,11 @@ def split_name(name: str, allow_dirs: bool) -> tuple[list[str], str]:
             "(seul le premier niveau du dossier est chargé)."
         )
     for part in [*dirs, cls]:
-        if not part.isidentifier():
-            raise click.BadParameter(f"'{name}' : '{part}' n'est pas un nom Python valide.")
+        # Le nom de fichier (et de fonction pour make:command) ne doit pas être un mot réservé.
+        if not part.isidentifier() or any(map(keyword.iskeyword, (part, class_to_file(part)))):
+            raise click.BadParameter(
+                f"'{name}' : '{part}' ({class_to_file(part)}) n'est pas un nom Python valide."
+            )
     if not cls[0].isupper():
         raise click.BadParameter(f"'{name}' : un nom de classe commence par une majuscule.")
     return [class_to_file(d) for d in dirs], cls
@@ -206,6 +210,13 @@ class ArtisanGroup(AppGroup):
                     f"Erreur dans app/console/commands/{file.name} : {exc}"
                 ) from exc
             for value in vars(module).values():
-                if isinstance(value, click.Command):
+                # Seulement les commandes définies dans ce fichier, pas celles qu'il importe.
+                if not isinstance(value, click.Command):
+                    continue
+                if getattr(value.callback, "__module__", None) != module.__name__:
+                    continue
+                # Le module reste en cache : une nouvelle app ne doit pas ré-envelopper.
+                if not getattr(value.callback, "_artisan_appcontext", False):
                     value.callback = with_appcontext(value.callback)
-                    self.add_command(value)
+                    value.callback._artisan_appcontext = True
+                self.add_command(value)

@@ -179,3 +179,14 @@ def test_generated_project_console(project):
     for args in (["check"], ["format", "--check"]):
         result = run(project, "-m", "ruff", *args, "--config", repo_config, *generated)
         assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_generated_project_broken_command_is_reported(project):
+    (project / "app/console/commands/broken.py").write_text("raise RuntimeError('boom')\n")
+    # Flask attrape l'erreur pendant --help : trace affichée (code 0), commandes en échec.
+    result = run(project, "-m", "flask", "--help")
+    assert "broken.py" in result.stdout + result.stderr
+    result = run(project, "-m", "flask", "route:list")
+    assert result.returncode != 0
+    assert "app/console/commands/broken.py" in result.stdout + result.stderr
+    assert run(project, "-c", "from wsgi import app; print(app.name)").returncode == 0

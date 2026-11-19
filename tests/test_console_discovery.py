@@ -90,3 +90,26 @@ def test_broken_command_file_does_not_break_app(project):
 def test_missing_folder_is_fine(make_project):
     _, run = runner(make_project())
     assert run("--help").exit_code == 0
+
+
+def test_callbacks_wrapped_once_across_apps(project):
+    first, run = runner(project)
+    run("app:hello")
+    callback = first.cli.commands["app:hello"].callback
+    for _ in range(3):
+        app, run = runner(project)
+        assert run("app:hello").exit_code == 0
+        assert app.cli.commands["app:hello"].callback is callback
+
+
+def test_imported_commands_are_not_reregistered(project):
+    from flask_artisan.console import make_model
+
+    callback = make_model.callback
+    (project / "app" / "console" / "commands" / "reuse.py").write_text(
+        "from flask_artisan.console import make_model  # noqa: F401\n"
+    )
+    app, run = runner(project)
+    assert run("--help").exit_code == 0
+    assert app.cli.commands["make:model"] is make_model
+    assert make_model.callback is callback
