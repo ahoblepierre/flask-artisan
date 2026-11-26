@@ -10,7 +10,10 @@ objet `Flask` : `flask run`, les extensions Flask et leur documentation fonction
 
 ## Démarrer un projet
 
+Prérequis : Python 3.10 ou plus (`python3 --version`). Sur macOS, le `python3` livré avec Xcode est un 3.9 : installez une version récente (python.org ou Homebrew).
+
 ```bash
+python3 -m venv .venv && source .venv/bin/activate   # environnement virtuel
 pip install flask-artisan
 flask-artisan new blog
 cd blog
