@@ -93,10 +93,9 @@ class Application(Flask, Container):
         self.config.update(repository.get("flask", {}))
         proxies = _trusted_proxies(repository.get("app.trusted_proxies", 0))
         if proxies:
-            # Derrière n proxys : IP, schéma, hôte et port lus dans les X-Forwarded-* qu'ils posent.
-            self.wsgi_app = ProxyFix(
-                self.wsgi_app, x_for=proxies, x_proto=proxies, x_host=proxies, x_port=proxies
-            )
+            # IP et schéma seulement : nginx ne pose pas X-Forwarded-Host par défaut, et un hôte
+            # choisi par le client empoisonnerait les url_for(_external=True) (liens des mails).
+            self.wsgi_app = ProxyFix(self.wsgi_app, x_for=proxies, x_proto=proxies)
 
     def register(self, provider_class: type[ServiceProvider]) -> ServiceProvider:
         if provider_class in self._providers:

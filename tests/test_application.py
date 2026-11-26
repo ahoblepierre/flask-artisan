@@ -212,3 +212,14 @@ def test_trusted_proxies_from_env_string(make_project):
 def test_invalid_trusted_proxies(make_project, value):
     with pytest.raises(ValueError, match="TRUSTED_PROXIES"):
         Application(make_project(trusted_proxies=value))
+
+
+def test_trusted_proxies_ignores_forwarded_host(make_project):
+    from flask import request
+
+    app = Application(make_project(trusted_proxies="1"))
+    app.add_url_rule("/host", "host", lambda: request.host_url)
+    r = app.test_client().get(
+        "/host", headers={"X-Forwarded-Host": "evil.example", "X-Forwarded-Proto": "https"}
+    )
+    assert r.text == "https://localhost/"

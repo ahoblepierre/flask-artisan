@@ -949,7 +949,7 @@ Derrière nginx ou un load balancer, Flask voit l'IP du proxy : tous les clients
 TRUSTED_PROXIES=1
 ```
 
-L'IP, le schéma, l'hôte et le port sont alors lus dans les en-têtes `X-Forwarded-*` posés par le proxy (`ProxyFix` de Werkzeug). Laissez `0` (défaut) sans proxy : sinon un client pourrait choisir son IP avec un faux `X-Forwarded-For`.
+L'IP du client et le schéma (`https`) sont alors lus dans `X-Forwarded-For` et `X-Forwarded-Proto`, posés par le proxy (`ProxyFix` de Werkzeug). L'hôte et le port ne sont pas lus dans `X-Forwarded-Host` / `X-Forwarded-Port` : un proxy qui ne les pose pas laisserait le client choisir l'hôte des URL absolues (liens des mails) ; le proxy doit transmettre l'en-tête `Host`, ou fixez `SERVER_NAME` dans `config/flask.py`. Laissez `0` (défaut) sans proxy : sinon un client pourrait choisir son IP avec un faux `X-Forwarded-For`.
 
 ### `RateLimiter`
 

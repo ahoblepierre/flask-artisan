@@ -121,7 +121,7 @@ Le tout repose sur le cache (#32) : les compteurs et les verrous sont des clés 
 
 ### Proxy
 
-- `config("app.trusted_proxies", 0)` lu dans `Application.__init__` : si > 0, `self.wsgi_app = ProxyFix(self.wsgi_app, x_for=n, x_proto=n, x_host=n, x_port=n)`. Valeur non entière → `ValueError` au démarrage, qui nomme `TRUSTED_PROXIES`.
+- `config("app.trusted_proxies", 0)` lu dans `Application.__init__` : si > 0, `self.wsgi_app = ProxyFix(self.wsgi_app, x_for=n, x_proto=n)` (relecture finale : `x_host`/`x_port` retirés, un hôte choisi par le client empoisonnerait les URL absolues). Valeur non entière → `ValueError` au démarrage, qui nomme `TRUSTED_PROXIES`.
 - Squelette : `"trusted_proxies": int(env("TRUSTED_PROXIES", 0))` dans `config/app.py`, ligne commentée dans `.env.example`.
 
 ### Squelette
