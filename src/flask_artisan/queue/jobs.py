@@ -3,6 +3,9 @@
 import logging
 from datetime import timedelta
 
+from flask_artisan.mail import Mailable, Mailer
+from flask_artisan.queue.serialization import class_path, import_class
+
 logger = logging.getLogger("flask_artisan.queue")
 
 
@@ -66,3 +69,28 @@ def execute(app, job: Job, *, final: bool) -> None:
                 except Exception:
                     logger.exception("Erreur dans %s.failed()", type(job).__name__)
             raise
+
+
+class SendQueuedMailable(Job):
+    """Job du framework : envoie un mailable mis en file par `Mail.to(...).queue(...)`."""
+
+    @classmethod
+    def wrap(cls, mailable: Mailable, envelope: dict, mailer: str | None) -> "SendQueuedMailable":
+        job = cls()
+        job.mailable_class = class_path(type(mailable))
+        job.mailable_data = {k: v for k, v in vars(mailable).items() if not k.startswith("_")}
+        job.envelope = {kind: [list(a) for a in addresses] for kind, addresses in envelope.items()}
+        job.mailer = mailer
+        return job
+
+    def handle(self, mailer: Mailer) -> None:
+        cls = import_class(self.mailable_class, Mailable)
+        mailable = cls.__new__(cls)
+        for key, value in self.mailable_data.items():
+            if key.startswith("_"):
+                raise TypeError(f"Attribut invalide dans un mail en file : {key!r}.")
+            setattr(mailable, key, value)
+        envelope = {
+            kind: [tuple(a) for a in addresses] for kind, addresses in self.envelope.items()
+        }
+        mailer._send(self.mailer, envelope, mailable)
