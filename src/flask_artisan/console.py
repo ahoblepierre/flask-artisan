@@ -88,6 +88,48 @@ def make_request(name, force):
     write_stub("app/http/requests", name, "request", force=force)
 
 
+@click.command("make:event")
+@click.argument("name")
+@force_option
+@with_appcontext
+def make_event(name, force):
+    """Crée un événement dans app/events."""
+    write_stub("app/events", name, "event", force=force)
+
+
+@click.command("make:listener")
+@click.argument("name")
+@click.option("--event", "event_name", help="Événement écouté (ex. OrderShipped).")
+@force_option
+@with_appcontext
+def make_listener(name, event_name, force):
+    """Crée un écouteur d'événement dans app/listeners."""
+    if event_name is None:
+        path = write_stub("app/listeners", name, "listener", force=force)
+    else:
+        dirs, event_class = split_name(event_name, allow_dirs=True)
+        module = ".".join(["app", "events", *dirs, class_to_file(event_class)])
+        event_file = Path(*module.split(".")).with_suffix(".py")
+        if not current_app.base_path(event_file.as_posix()).is_file():
+            raise click.ClickException(
+                f"{event_file.as_posix()} introuvable : créez d'abord l'événement "
+                f"(flask make:event {event_name})."
+            )
+        path = write_stub(
+            "app/listeners",
+            name,
+            "listener.event",
+            force=force,
+            event_import=f"from {module} import {event_class}",
+            event_class=event_class,
+        )
+    _, cls = split_name(name, allow_dirs=True)
+    click.echo(
+        'Ajoutez-le à "listen" dans app/providers/event_service_provider.py :\n'
+        f"  {_import_line(path, cls)}"
+    )
+
+
 @click.command("make:model")
 @click.argument("name")
 @force_option
@@ -183,6 +225,8 @@ COMMANDS = [
     make_provider,
     make_command,
     make_request,
+    make_event,
+    make_listener,
     route_list,
 ]
 
