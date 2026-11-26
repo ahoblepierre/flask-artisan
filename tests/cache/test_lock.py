@@ -98,3 +98,17 @@ def test_facade(cache_app, tmp_path):
     configure(cache_app, tmp_path)
     assert Cache.lock("job").get() is True
     assert Cache.lock("job").get() is False
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error"),
+    [
+        ({"name": ""}, ValueError),
+        ({"name": "job", "seconds": -1}, ValueError),
+        ({"name": "job", "owner": ""}, ValueError),
+        ({"name": "job", "owner": 123}, TypeError),
+    ],
+)
+def test_lock_arguments_are_checked(store, kwargs, error):
+    with pytest.raises(error):
+        store.lock(**kwargs)

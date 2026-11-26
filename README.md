@@ -926,9 +926,9 @@ X-RateLimit-Reset: 1764150000
 {"message": "Too Many Attempts."}
 ```
 
-`Retry-After` donne les secondes à attendre, `X-RateLimit-Reset` l'horodatage Unix de réouverture. Une requête refusée ne compte pas : la fenêtre se rouvre à l'heure annoncée.
+`Retry-After` donne les secondes à attendre, `X-RateLimit-Reset` l'horodatage Unix de réouverture. Une requête refusée ne compte pas : la fenêtre se rouvre à l'heure annoncée. Même une rafale de requêtes simultanées ne dépasse pas la limite : chacune compte avant de passer, et celles en trop sont refusées.
 
-**Qui est compté.** Par défaut, l'adresse IP du client. Si un middleware `auth` a déjà identifié l'utilisateur **avant** `throttle`, c'est l'utilisateur qui est compté, quelle que soit son IP :
+**Qui est compté.** Par défaut, l'adresse IP du client. Si un middleware `auth` a déjà identifié l'utilisateur **avant** `throttle`, c'est l'utilisateur qui est compté (par guard : l'utilisateur 1 du guard `api` et l'admin 1 d'un guard `admin` ont chacun leur compteur), quelle que soit son IP :
 
 ```python
 with Route.middleware("auth:api", "throttle:60,1"):   # auth d'abord : limite par utilisateur
@@ -1009,7 +1009,7 @@ if lock.get():
 
 | Forme | Effet |
 |---|---|
-| `Cache.lock(name, seconds=0, owner=None)` | un verrou ; `seconds=0` : sans expiration |
+| `Cache.lock(name, seconds=0, owner=None)` | un verrou ; `seconds=0` : sans expiration ; nom et `owner` sont des chaînes non vides (`TypeError` / `ValueError` sinon, comme une durée négative) |
 | `lock.get()` | prend le verrou s'il est libre ; `True` / `False` |
 | `lock.get(callback)` | si le verrou est libre : le prend, appelle `callback()`, le libère (même en cas d'exception) et renvoie son résultat ; sinon `False` |
 | `lock.block(seconds)` / `lock.block(seconds, callback)` | comme `get`, mais attend jusqu'à `seconds` secondes (essai toutes les 250 ms), puis lève `LockTimeoutError` |
@@ -1046,14 +1046,14 @@ Cache.restore_lock("import:clients", self.owner).release()
 | Store | Compteurs et verrous |
 |---|---|
 | `redis` | sûrs entre processus et entre serveurs (`SET NX`, `INCRBY`, script Lua pour `release`) |
-| `file` (défaut) | sûrs entre processus d'**une même machine** (verrou `flock` sur `storage/cache/.lock`) ; pas sous Windows, où ils restent approximatifs |
+| `file` (défaut) | sûrs entre processus d'**une même machine** (verrou `flock` sur `storage/cache/.lock`, ouvert en lecture seule : un cron sous un autre utilisateur n'a pas besoin d'y écrire) ; pas sous Windows, où ils restent approximatifs |
 | `array` | propres à chaque processus : chaque worker gunicorn a ses propres compteurs |
 
 Avec plusieurs serveurs, utilisez `redis` (`CACHE_STORE=redis`, ou seulement `"limiter": "redis"` pour les compteurs).
 
 ### Tester
 
-Avec le store `file`, les compteurs restent sur le disque d'un lancement de tests à l'autre : le 6ᵉ login en une minute répondrait 429. Utilisez `CACHE_STORE=array` en test et videz le cache entre deux tests (voir [Cache, Tester](#tester-1)), ou remettez un compteur à zéro avec `RateLimiter.clear(key)`.
+Avec le store `file`, les compteurs restent sur le disque d'un lancement de tests à l'autre : le 6ᵉ login en une minute répondrait 429. Utilisez `CACHE_STORE=array` en test et videz le cache entre deux tests (voir [Cache, Tester](#tester-1)), et remettez vos propres compteurs à zéro avec `RateLimiter.clear(key)`. Les compteurs de `throttle` ont une clé interne (un hash) : pour eux, videz le cache (`Cache.flush()`).
 
 ## Console
 

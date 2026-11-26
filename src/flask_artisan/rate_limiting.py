@@ -78,7 +78,7 @@ def _identity(request) -> str:
     # throttle ne lit ni session ni token lui-même (pas de requête SQL, pas de Vary: Cookie).
     for name, user in request.environ.get("flask_artisan.auth", {}).items():
         if name.startswith("user:") and user is not None:
-            return f"user:{user.id}"
+            return f"{name}:{user.id}"  # "user:<guard>:<id>" : deux modèles, deux compteurs
     return f"ip:{request.remote_addr}"
 
 
@@ -92,7 +92,12 @@ class ThrottleRequests(Middleware):
         key = "throttle:" + hashlib.sha1(signature.encode()).hexdigest()
         limiter = current_app.make(RateLimiter)
 
-        if limiter.too_many_attempts(key, limit):
+        refused = limiter.too_many_attempts(key, limit)
+        if not refused and limiter.hit(key, minutes * 60) > limit:
+            # Rafale : d'autres requêtes ont compté entre la lecture et le hit (atomique).
+            limiter._store().decrement(key)  # une requête refusée ne compte pas
+            refused = True
+        if refused:
             retry = limiter.available_in(key)
             headers = {
                 "Retry-After": str(retry),
@@ -102,7 +107,6 @@ class ThrottleRequests(Middleware):
             }
             return current_app.make_response(({"message": "Too Many Attempts."}, 429, headers))
 
-        limiter.hit(key, minutes * 60)
         response = next(request)
         # setdefault : un throttle plus proche de la route (plus strict) a déjà répondu.
         response.headers.setdefault("X-RateLimit-Limit", str(limit))

@@ -215,10 +215,18 @@ class Lock:
     def __init__(self, store: Store, name: str, seconds=0, owner: str | None = None):
         if not isinstance(name, str):
             raise TypeError(f"Un nom de verrou est une chaîne, pas {name!r}.")
+        if not name:
+            raise ValueError("Un nom de verrou ne peut pas être vide.")
+        if owner is not None and not isinstance(owner, str):
+            raise TypeError(f"Le propriétaire d'un verrou est une chaîne, pas {owner!r}.")
+        if owner == "":
+            raise ValueError("Le propriétaire d'un verrou ne peut pas être vide.")
+        seconds = _seconds(seconds)
+        if seconds is not None and seconds < 0:
+            raise ValueError(f"Durée de verrou négative : {seconds} (0 = sans expiration).")
         self.store, self.name = store, name
         self.owner = owner or secrets.token_hex(16)
-        seconds = _seconds(seconds)
-        self._ttl = seconds if seconds and seconds > 0 else None  # 0 : sans expiration
+        self._ttl = seconds or None  # 0 : sans expiration
         self._k = store._key("lock:" + name)
         self._text = store._encode(name, self.owner)  # JSON : la lecture tolérante le lit
 
@@ -270,7 +278,8 @@ class ArrayStore(Store):
     def __init__(self, prefix: str):
         super().__init__(prefix)
         self._data: dict[str, tuple[float | None, str]] = {}
-        self._mutex = threading.Lock()  # un processus servi par plusieurs threads
+        # Un processus servi par plusieurs threads ; réentrant : _pull et _delete_if appellent _get.
+        self._mutex = threading.RLock()
 
     def _alive(self, k: str):
         entry = self._data.get(k)
@@ -280,8 +289,9 @@ class ArrayStore(Store):
         return entry
 
     def _get(self, k):
-        entry = self._alive(k)
-        return entry[1] if entry else None
+        with self._mutex:  # _alive supprime une clé expirée : jamais pendant un add concurrent
+            entry = self._alive(k)
+            return entry[1] if entry else None
 
     def _put(self, k, text, seconds):
         self._data[k] = (None if seconds is None else time.time() + seconds, text)
@@ -319,6 +329,7 @@ class ArrayStore(Store):
         self._data.clear()
 
 
+_STALE = object()  # FileStore._read : clé expirée ou corrompue, à supprimer sous le verrou
 CACHE_FILE = re.compile(r"[0-9a-f]{64}")
 
 
@@ -341,7 +352,9 @@ class FileStore(Store):
         except FileNotFoundError:
             pass
 
-    def _read(self, k: str) -> tuple[float | None, str] | None:
+    def _read(self, k: str, clean: bool = True):
+        """(expiration, texte), ou None si absente. `clean=False` : une clé expirée ou corrompue
+        renvoie _STALE au lieu d'être supprimée, pour la supprimer sous le verrou."""
         path = self._path(k)
         inode = None
         try:
@@ -356,10 +369,14 @@ class FileStore(Store):
         except FileNotFoundError:
             return None
         except (OSError, ValueError, KeyError, TypeError):
+            if not clean:
+                return _STALE
             self._unlink_if_same(path, inode)  # fichier corrompu : absent
             logger.warning("Cache : fichier illisible pour %r, supprimé.", k)
             return None
         if expires is not None and expires <= time.time():
+            if not clean:
+                return _STALE
             self._unlink_if_same(path, inode)
             return None
         return expires, text
@@ -380,7 +397,11 @@ class FileStore(Store):
             raise
 
     def _get(self, k):
-        entry = self._read(k)
+        # Jamais appelé sous _locked (flock non réentrant) : les sections critiques lisent par _read.
+        entry = self._read(k, clean=False)
+        if entry is _STALE:
+            with self._locked():  # suppression sous le verrou : jamais une écriture concurrente
+                entry = self._read(k)
         return entry[1] if entry else None
 
     def _put(self, k, text, seconds):
@@ -395,12 +416,13 @@ class FileStore(Store):
             yield
             return
         self.directory.mkdir(parents=True, exist_ok=True)
-        with open(self.directory / ".lock", "a") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(f, fcntl.LOCK_UN)
+        # Lecture seule (créé s'il manque) : flock suffit, même pour un cron sous un autre utilisateur.
+        fd = os.open(self.directory / ".lock", os.O_RDONLY | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            os.close(fd)  # libère le flock
 
     def _add(self, k, text, seconds):
         with self._locked():
@@ -417,9 +439,9 @@ class FileStore(Store):
 
     def _pull(self, k):
         with self._locked():
-            text = self._get(k)
+            entry = self._read(k)
             self._path(k).unlink(missing_ok=True)
-            return text
+            return entry[1] if entry else None
 
     def _increment(self, k, by):
         with self._locked():
@@ -430,7 +452,8 @@ class FileStore(Store):
 
     def _delete_if(self, k, text):
         with self._locked():
-            if self._get(k) != text:
+            entry = self._read(k)
+            if entry is None or entry[1] != text:
                 return False
             self._path(k).unlink(missing_ok=True)
             return True

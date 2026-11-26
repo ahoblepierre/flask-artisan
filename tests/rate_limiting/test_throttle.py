@@ -126,3 +126,28 @@ def test_invalid_parameters(make_client, clock, params):
     _, c = make_client(lambda: Route.get("/t", ok).middleware(f"throttle:{params}"))
     with pytest.raises(ValueError, match="throttle"):
         c.get("/t")
+
+
+def test_parallel_burst_cannot_overshoot(make_client, clock, monkeypatch):
+    from flask_artisan.rate_limiting import RateLimiter as Limiter
+
+    _, c = make_client(lambda: Route.get("/t", ok).middleware("throttle:2,1"))
+    # Rafale : toutes les requêtes lisent le compteur avant qu'aucune n'ait compté.
+    monkeypatch.setattr(Limiter, "too_many_attempts", lambda self, key, limit: False)
+    assert [c.get("/t").status_code for _ in range(4)] == [200, 200, 429, 429]
+    monkeypatch.undo()
+    clock.advance(61)
+    assert [c.get("/t").status_code for _ in range(3)] == [200, 200, 429]
+
+
+def test_identity_includes_guard_name():
+    from types import SimpleNamespace
+
+    from flask_artisan.rate_limiting import _identity
+
+    def request(state):
+        return SimpleNamespace(environ={"flask_artisan.auth": state}, remote_addr="1.1.1.1")
+
+    user = SimpleNamespace(id=1)
+    assert _identity(request({"user:web": user})) != _identity(request({"user:admin": user}))
+    assert _identity(request({"user:web": None})) == "ip:1.1.1.1"

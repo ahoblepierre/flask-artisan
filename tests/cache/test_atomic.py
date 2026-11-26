@@ -1,5 +1,8 @@
 import multiprocessing
+import os
 import threading
+
+import pytest
 
 from flask_artisan.cache import FileStore
 
@@ -55,3 +58,51 @@ def test_array_add_wins_once_across_threads(cache_app, tmp_path):
     for t in threads:
         t.join()
     assert wins.count(True) == 1
+
+
+def _held(lock_cm, started, release):
+    with lock_cm:
+        started.set()
+        release.wait(5)
+
+
+def test_array_get_waits_for_mutex(cache_app, tmp_path):
+    configure(cache_app, tmp_path, default="array")
+    s = cache_app.make("cache").store()
+    s.put("k", 1)
+    started, release, done = threading.Event(), threading.Event(), threading.Event()
+    threading.Thread(target=_held, args=(s._mutex, started, release)).start()
+    started.wait(5)
+    reader = threading.Thread(target=lambda: (s.get("k"), done.set()))
+    reader.start()
+    assert not done.wait(0.2)  # get attend la fin de la section critique
+    release.set()
+    reader.join(5)
+    assert done.is_set()
+
+
+def test_file_expired_cleanup_waits_for_lock(tmp_path, monkeypatch):
+    import time
+
+    s = FileStore("p:", tmp_path / "c")
+    s.put("k", 1, 10)
+    now = time.time()
+    monkeypatch.setattr(time, "time", lambda: now + 11)
+    started, release, done = threading.Event(), threading.Event(), threading.Event()
+    threading.Thread(target=_held, args=(s._locked(), started, release)).start()
+    started.wait(5)
+    reader = threading.Thread(target=lambda: (s.get("k"), done.set()))
+    reader.start()
+    assert not done.wait(0.2)  # le nettoyage d'une clé expirée passe par le verrou
+    release.set()
+    reader.join(5)
+    assert done.is_set()
+    assert not s._path("p:k").exists()
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignore les permissions")
+def test_file_lock_file_read_only(tmp_path):
+    s = FileStore("p:", tmp_path / "c")
+    s.increment("n")
+    (tmp_path / "c" / ".lock").chmod(0o444)
+    assert s.increment("n") == 2
