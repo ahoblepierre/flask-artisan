@@ -181,3 +181,34 @@ def test_resources_views_wins_over_templates(make_project):
     _write(base / "templates/same.html", "flask")
     with Application(base).app_context():
         assert render_template("same.html") == "views"
+
+
+def _remote_addr(app):
+    from flask import request
+
+    app.add_url_rule("/ip", "ip", lambda: request.remote_addr)
+    return app.test_client().get(
+        "/ip",
+        headers={"X-Forwarded-For": "203.0.113.7"},
+        environ_base={"REMOTE_ADDR": "10.0.0.1"},
+    )
+
+
+def test_trusted_proxies_reads_forwarded_for(make_project):
+    app = Application(make_project(trusted_proxies="1"))
+    assert _remote_addr(app).text == "203.0.113.7"
+
+
+def test_forwarded_for_ignored_by_default(make_project):
+    assert _remote_addr(Application(make_project())).text == "10.0.0.1"
+
+
+def test_trusted_proxies_from_env_string(make_project):
+    app = Application(make_project(trusted_proxies="'1'"))
+    assert _remote_addr(app).text == "203.0.113.7"
+
+
+@pytest.mark.parametrize("value", ["'abc'", "-1", "True"])
+def test_invalid_trusted_proxies(make_project, value):
+    with pytest.raises(ValueError, match="TRUSTED_PROXIES"):
+        Application(make_project(trusted_proxies=value))
