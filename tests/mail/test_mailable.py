@@ -61,3 +61,16 @@ def test_addresses_without_at():
 def test_addresses_reject_newlines(bad):
     with pytest.raises(ValueError):
         _addresses(bad)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        ("a@x.org, evil@y.org", "A"),
+        SimpleNamespace(email="a@x.org, evil@y.org"),
+        SimpleNamespace(email="A <a@x.org>"),
+    ],
+)
+def test_addresses_reject_several_or_formatted_in_raw_forms(bad):
+    with pytest.raises(ValueError, match="evil|A <"):
+        _addresses(bad)

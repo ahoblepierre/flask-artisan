@@ -1,5 +1,6 @@
 import logging
 import smtplib
+import ssl
 
 import pytest
 
@@ -12,8 +13,12 @@ class FakeSMTP:
     calls: list = []
     fail = False
 
-    def __init__(self, host, port, timeout=None):
+    contexts: list = []
+
+    def __init__(self, host, port, timeout=None, context=None):
         self.calls.append(("connect", type(self).__name__, host, port, timeout))
+        if context is not None:
+            self.contexts.append(context)
 
     def __enter__(self):
         return self
@@ -21,7 +26,8 @@ class FakeSMTP:
     def __exit__(self, *exc):
         self.calls.append(("quit",))
 
-    def starttls(self):
+    def starttls(self, context=None):
+        self.contexts.append(context)
         self.calls.append(("starttls",))
 
     def login(self, username, password):
@@ -40,6 +46,7 @@ class FakeSSL(FakeSMTP):
 @pytest.fixture
 def smtp(mail_app, monkeypatch):
     FakeSMTP.calls = []
+    FakeSMTP.contexts = []
     FakeSMTP.fail = False
     monkeypatch.setattr("flask_artisan.mail.smtplib.SMTP", FakeSMTP)
     monkeypatch.setattr("flask_artisan.mail.smtplib.SMTP_SSL", FakeSSL)
@@ -113,3 +120,17 @@ def test_log_transport(mail_app, caplog):
         Mail.to("a@x.org").send(Hello("A"))
     assert "a@x.org" in caplog.text and "Subject: Hi" in caplog.text
     assert "Hello A" in caplog.text and "s3cret" not in caplog.text
+
+
+@pytest.mark.parametrize("encryption", ["tls", "ssl"])
+def test_smtp_verifies_certificate(smtp, encryption):
+    smtp(host="h", port=587, encryption=encryption)
+    Mail.to("a@x.org").send(Hello("A"))
+    [context] = FakeSMTP.contexts
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+
+
+def test_smtp_unknown_option_raises(smtp):
+    smtp(host="h", port=587, encrytion="tls")
+    with pytest.raises(TypeError, match="encrytion"):
+        Mail.to("a@x.org").send(Hello("A"))

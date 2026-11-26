@@ -3,6 +3,7 @@
 import copy
 import mimetypes
 import smtplib
+import ssl
 from collections import Counter
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid, parseaddr
@@ -39,7 +40,9 @@ def _address(value) -> tuple[str, str]:
             f"Destinataire invalide : {value!r} (attendu : une adresse, (adresse, nom) "
             "ou un objet avec un attribut email)."
         )
-    if not isinstance(address, str) or "@" not in address:
+    # parseaddr doit rendre l'adresse telle quelle : refuse "a@x.org, b@y.org" (destinataire
+    # ajouté) ou "Nom <a@x.org>" dans les formes tuple et objet.
+    if not isinstance(address, str) or "@" not in address or parseaddr(address)[1] != address:
         raise ValueError(f"Adresse mail invalide : {address!r}.")
     name = str(name or "")
     return _check_line(name, "un nom"), _check_line(address, "une adresse")
@@ -133,7 +136,16 @@ class LogTransport:
 class SmtpTransport:
     """Une connexion SMTP par envoi ; les erreurs de smtplib remontent telles quelles."""
 
-    def __init__(self, host, port, username=None, password=None, encryption=None, timeout=10, **_):
+    def __init__(
+        self,
+        host,
+        port,
+        username=None,
+        password=None,
+        encryption=None,
+        timeout=10,
+        transport="smtp",
+    ):
         if encryption not in (None, "", "tls", "ssl"):
             raise ValueError(f"MAIL_ENCRYPTION inconnu : {encryption!r} (tls, ssl ou vide).")
         self.host, self.port, self.timeout = host, int(port), timeout
@@ -141,10 +153,17 @@ class SmtpTransport:
         self.encryption = encryption or None
 
     def send(self, message: EmailMessage, recipients: list[str]) -> None:
-        connect = smtplib.SMTP_SSL if self.encryption == "ssl" else smtplib.SMTP
-        with connect(self.host, self.port, timeout=self.timeout) as smtp:
+        # Certificat et nom d'hôte vérifiés : sans contexte, smtplib accepte tout certificat.
+        context = ssl.create_default_context()
+        if self.encryption == "ssl":
+            connection = smtplib.SMTP_SSL(
+                self.host, self.port, timeout=self.timeout, context=context
+            )
+        else:
+            connection = smtplib.SMTP(self.host, self.port, timeout=self.timeout)
+        with connection as smtp:
             if self.encryption == "tls":
-                smtp.starttls()
+                smtp.starttls(context=context)
             if self.username:
                 smtp.login(self.username, self.password or "")
             smtp.send_message(message, to_addrs=recipients)
