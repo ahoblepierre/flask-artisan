@@ -9,6 +9,7 @@ from typing import Any
 from flask import request
 
 from flask_artisan.middleware import HttpKernel, resolve
+from flask_artisan.validation import AuthorizationError, ValidationError
 
 
 class RouteError(Exception):
@@ -216,7 +217,12 @@ class Router:
             def run(i, req):
                 if i == len(stack):
                     fn = getattr(app.make(cls), target) if cls else target
-                    return app.make_response(_jsonable(app, app.call(fn, **values)))
+                    try:
+                        rv = app.call(fn, **values)
+                    except (ValidationError, AuthorizationError) as exc:
+                        # Réponse rendue ici pour que les middlewares la voient (comme Laravel).
+                        return exc.get_response()
+                    return app.make_response(_jsonable(app, rv))
                 middleware, params = stack[i]
                 # make_response : un middleware peut renvoyer un dict ou un tuple comme une vue.
                 return app.make_response(

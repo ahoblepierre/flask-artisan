@@ -97,3 +97,26 @@ def test_all_and_input(routed_app):
 def test_outside_request_is_an_error():
     with pytest.raises(RuntimeError):
         StoreRequest()
+
+
+def test_middleware_sees_validation_responses(routed_app):
+    from flask_artisan import HttpKernel, Middleware
+
+    class Stamp(Middleware):
+        def handle(self, request, next):
+            response = next(request)
+            response.headers["X-Stamp"] = "1"
+            return response
+
+    class Kernel(HttpKernel):
+        global_middleware = [Stamp]
+
+    def routes():
+        Route.post("/posts", Ctl.store)
+        Route.post("/deny", Ctl.deny)
+
+    client = routed_app(routes, kernel=Kernel).test_client()
+    for url, status in (("/posts", 422), ("/deny", 403)):
+        r = client.post(url, json={})
+        assert r.status_code == status
+        assert r.headers.get("X-Stamp") == "1"

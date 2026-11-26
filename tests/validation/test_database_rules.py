@@ -57,3 +57,9 @@ def test_bad_identifiers_rejected(app, rule):
 
 def test_none_fails_unique_without_nullable(app):
     assert errors({"email": None}, {"email": f"unique:{TABLE}"}) != {}
+
+
+@pytest.mark.parametrize("value", [["a@x"], {"x": 1}])
+@pytest.mark.parametrize("rule", ["unique", "exists"])
+def test_list_or_dict_value_fails_db_rules_without_query(app, rule, value):
+    assert errors({"email": value}, {"email": f"{rule}:{TABLE}"}) != {}

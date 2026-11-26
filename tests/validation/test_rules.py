@@ -65,3 +65,8 @@ def test_custom_messages_priority():
 
 def test_custom_message_placeholders():
     assert errors({"s": "abcd"}, {"s": "max:3"}, {"max": ":attribute > :max"}) == {"s": ["s > 3"]}
+
+
+@pytest.mark.parametrize("rules", ["numeric", "integer|max:10", "numeric|min:1"])
+def test_huge_integer_is_an_error_not_a_crash(rules):
+    assert errors({"n": 10**400}, {"n": rules}) != {}

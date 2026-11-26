@@ -78,7 +78,10 @@ def _numeric(value, params, field, v):
     if _is_bool(value):
         return False
     if isinstance(value, (int, float)):
-        return math.isfinite(value)
+        try:
+            return math.isfinite(value)
+        except OverflowError:  # entier JSON géant
+            return False
     if isinstance(value, str):
         try:
             return math.isfinite(float(value))
@@ -127,6 +130,8 @@ def _size(value, field, v) -> float | None:
     if v.names(field) & {"numeric", "integer"}:
         try:
             return float(value)
+        except OverflowError:
+            return math.inf if value > 0 else -math.inf
         except (TypeError, ValueError):
             return None  # la règle de type signale déjà l'erreur
     if isinstance(value, (list, dict)):
@@ -180,6 +185,8 @@ def _row_exists(params, field, value, ignore=None) -> bool:
 
 
 def _unique(value, params, field, v):
+    if isinstance(value, (list, dict)):
+        return False
     ignore = None
     if len(params) > 2 and params[2]:
         ignore = (params[2], params[3] if len(params) > 3 and params[3] else "id")
@@ -206,7 +213,9 @@ RULES = {
     "same": lambda value, params, field, v: params[0] in v.data and v.data[params[0]] == value,
     "regex": _regex,
     "unique": _unique,
-    "exists": lambda value, params, field, v: _row_exists(params, field, value),
+    "exists": lambda value, params, field, v: (
+        not isinstance(value, (list, dict)) and _row_exists(params, field, value)
+    ),
 }
 
 # Paramètres attendus : (nombre minimal, numériques ?).
