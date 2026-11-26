@@ -128,17 +128,18 @@ from wsgi import app
 from app.models.user import User
 
 with app.app_context():
-    User.create(name="A", email="a@x", password="secret")
+    User.create(name="A", email="a@x.org", password="secret")
 c = app.test_client()
-assert c.post("/api/login", json={"email": "a@x", "password": "bad"}).status_code == 401
-assert c.post("/api/login").status_code == 401
-assert c.post("/api/login", json=[1]).status_code == 401
-assert c.post("/api/login", json={"email": "a@x", "password": 1}).status_code == 401
-r = c.post("/api/login", json={"email": "a@x", "password": "secret"})
+assert c.post("/api/login", json={"email": "a@x.org", "password": "bad"}).status_code == 401
+r = c.post("/api/login")
+assert r.status_code == 422 and set(r.get_json()["errors"]) == {"email", "password"}, r.data
+assert c.post("/api/login", json=[1]).status_code == 422
+assert c.post("/api/login", json={"email": "a@x.org", "password": 1}).status_code == 422
+r = c.post("/api/login", json={"email": "a@x.org", "password": "secret"})
 assert r.status_code == 200, r.data
 auth = {"Authorization": "Bearer " + r.get_json()["token"]}
 r = c.get("/api/user", headers=auth)
-assert r.status_code == 200 and r.get_json()["email"] == "a@x", r.data
+assert r.status_code == 200 and r.get_json()["email"] == "a@x.org", r.data
 assert "password" not in r.get_json()
 assert c.post("/api/logout", headers=auth).status_code == 204
 assert c.get("/api/user", headers=auth).status_code == 401

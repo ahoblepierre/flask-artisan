@@ -214,3 +214,14 @@ def test_force_on_directory_is_a_clean_error(artisan):
     assert result.exit_code == 1
     assert "dossier" in result.output
     assert not isinstance(result.exception, IsADirectoryError)
+
+
+def test_make_request(artisan):
+    from flask_artisan.validation import FormRequest
+
+    app, run = artisan
+    result = run("make:request", "StorePostRequest")
+    assert result.exit_code == 0, result.output
+    path = app.base_path("app/http/requests/store_post_request.py")
+    assert issubclass(load(path).StorePostRequest, FormRequest)
+    assert_ruff_clean(path)

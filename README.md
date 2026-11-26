@@ -244,6 +244,54 @@ curl localhost:5000/api/user -H 'Authorization: Bearer 1|...'
 
 La session est un cookie signé avec `APP_KEY` : cette clé est obligatoire. Changer le mot de passe d'un utilisateur ferme ses sessions ; un `logout` ne fait que vider le cookie du navigateur courant (un cookie copié reste valide jusqu'à `PERMANENT_SESSION_LIFETIME`, 31 jours par défaut, réglable dans `config/flask.py`). Seul le hash SHA-256 de chaque token est stocké.
 
+## Validation
+
+Une `FormRequest` déclare ses règles ; annotée dans un controller, elle est construite, autorisée puis validée **avant** l'appel de la méthode :
+
+```python
+# app/http/requests/store_post_request.py   (flask make:request StorePostRequest)
+from flask_artisan.validation import FormRequest
+
+
+class StorePostRequest(FormRequest):
+    def authorize(self):          # False → 403 {"message": "This action is unauthorized."}
+        return True
+
+    def rules(self):
+        return {
+            "title": "required|string|max:255",
+            "email": "required|email|unique:users,email",
+            "tags": ["sometimes", "array"],          # forme liste : utile si un paramètre contient « | »
+        }
+
+    def messages(self):           # optionnel : "champ.règle" ou "règle"
+        return {"email.unique": "Cet email est déjà utilisé."}
+
+
+class PostController:
+    def store(self, request: StorePostRequest):
+        return Post.create(**request.validated()), 201   # seulement les champs avec une règle
+```
+
+Données lues : paramètres de l'URL fusionnés avec le corps (JSON objet, sinon formulaire). En cas d'échec, réponse **422** :
+
+```json
+{"message": "The title field is required. (and 1 more error)",
+ "errors": {"title": ["The title field is required."], "email": ["The email field must be a valid email address."]}}
+```
+
+Hors controller : `validate(data, rules)` rend les données validées ou lève `ValidationError` (qui devient la même réponse 422 si elle sort d'une vue) ; `Validator(data, rules).fails()` / `.errors()` pour décider soi-même.
+
+| Règles | |
+|---|---|
+| Présence | `required`, `required_with:a,b`, `nullable`, `sometimes` |
+| Types | `string`, `integer`, `numeric`, `boolean`, `array`, `email`, `url`, `date` |
+| Taille | `min:n`, `max:n`, `between:a,b` (valeur si `numeric`/`integer`, éléments pour une liste, longueur sinon) |
+| Valeurs | `in:a,b`, `not_in:a,b`, `confirmed`, `same:champ`, `regex:motif` |
+| Base | `unique:table[,colonne[,id_ignoré[,colonne_id]]]`, `exists:table[,colonne]` |
+
+Un champ absent ou vide n'est soumis qu'aux règles de présence ; `None` échoue toutes les autres règles sauf avec `nullable`. Pour ignorer la ligne courante lors d'une mise à jour : `f"unique:users,email,{request.view_args['id']}"`. Les valeurs ne sont pas converties (`"42"` reste une chaîne).
+
 ## Console
 
 Les générateurs écrivent le fichier au bon endroit, avec un squelette prêt à l'emploi :
@@ -253,6 +301,7 @@ flask make:controller PhotoController            # app/http/controllers/photo_co
 flask make:controller PhotoController --resource # les 7 méthodes de Route.resource
 flask make:controller Admin/UserController       # sous-dossier admin/
 flask make:model Post                            # app/models/post.py
+flask make:request StorePostRequest              # app/http/requests/store_post_request.py
 flask make:middleware EnsureJson                 # app/http/middleware/ensure_json.py
 flask make:provider PaymentServiceProvider       # app/providers/payment_service_provider.py
 flask make:command SendEmails                    # app/console/commands/send_emails.py → flask app:send-emails
@@ -340,6 +389,10 @@ Mail.send(...)
 3. ✅ ORM façon Eloquent sur SQLAlchemy, migrations
 4. ✅ Authentification (façade `Auth`, guards session et token)
 5. ✅ Commandes `flask make:*`, `flask migrate`, `flask route:list`
+
+Après la v0.1 :
+
+- ✅ Validation (`FormRequest`, règles façon Laravel, réponses 422 JSON)
 
 ## Contribuer
 

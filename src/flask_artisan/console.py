@@ -79,6 +79,15 @@ def make_controller(name, resource, force):
     write_stub("app/http/controllers", name, stub, force=force)
 
 
+@click.command("make:request")
+@click.argument("name")
+@force_option
+@with_appcontext
+def make_request(name, force):
+    """Crée une FormRequest dans app/http/requests."""
+    write_stub("app/http/requests", name, "request", force=force)
+
+
 @click.command("make:model")
 @click.argument("name")
 @force_option
@@ -173,6 +182,7 @@ COMMANDS = [
     make_middleware,
     make_provider,
     make_command,
+    make_request,
     route_list,
 ]
 
