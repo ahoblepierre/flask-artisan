@@ -13,11 +13,12 @@ import re
 import tempfile
 import time
 from datetime import timedelta
+from functools import cache
 from pathlib import Path
 
 from flask_artisan.queue.serialization import dump, load
 
-__all__ = ["ArrayStore", "CacheManager", "FileStore", "Store"]
+__all__ = ["ArrayStore", "CacheManager", "FileStore", "RedisStore", "Store"]
 
 logger = logging.getLogger("flask_artisan.cache")
 
@@ -299,6 +300,68 @@ class FileStore(Store):
                     path.unlink(missing_ok=True)
 
 
+@cache
+def _redis(url: str):
+    """Client Redis, un par URL et par processus (point de remplacement des tests)."""
+    try:
+        from redis import Redis
+    except ImportError:
+        raise RuntimeError(
+            'Le store redis demande redis-py : pip install "flask-artisan[redis]".'
+        ) from None
+    return Redis.from_url(url)
+
+
+class RedisStore(Store):
+    """Redis : TTL, `SET NX` et `INCRBY` natifs ; `flush` limité aux clés du préfixe."""
+
+    def __init__(self, prefix: str, client):
+        super().__init__(prefix)
+        self.client = client
+
+    def _get(self, k):
+        raw = self.client.get(k)
+        return None if raw is None else raw.decode()
+
+    def _put(self, k, text, seconds):
+        self.client.set(k, text, px=None if seconds is None else seconds * 1000)
+
+    def _add(self, k, text, seconds):
+        px = None if seconds is None else seconds * 1000
+        return bool(self.client.set(k, text, nx=True, px=px))
+
+    def _delete(self, k):
+        return bool(self.client.delete(k))
+
+    def _pull(self, k):
+        # GET + DEL dans une transaction : atomique sans exiger GETDEL (Redis ≥ 6.2).
+        pipe = self.client.pipeline(transaction=True)
+        pipe.get(k)
+        pipe.delete(k)
+        raw, _ = pipe.execute()
+        return None if raw is None else raw.decode()
+
+    def _increment(self, k, by):
+        from redis.exceptions import ResponseError
+
+        try:
+            return int(self.client.incrby(k, by))  # garde le TTL
+        except ResponseError as exc:
+            raise ValueError(f"increment : la valeur de {k!r} n'est pas un entier.") from exc
+
+    def _flush(self):
+        # Préfixe échappé : un * ou un [ dans le préfixe ne doit pas élargir le motif.
+        pattern = re.sub(r"([*?\[\]\\])", r"\\\1", self.prefix) + "*"
+        batch = []
+        for key in self.client.scan_iter(match=pattern, count=500):
+            batch.append(key)
+            if len(batch) >= 500:
+                self.client.delete(*batch)
+                batch = []
+        if batch:
+            self.client.delete(*batch)
+
+
 DEFAULT_STORES = {
     "array": {"driver": "array"},
     "file": {"driver": "file", "path": "storage/cache"},
@@ -335,6 +398,8 @@ class CacheManager:
             return store
         if driver == "file":
             return FileStore(prefix, self._app.base_path(options.get("path", "storage/cache")))
+        if driver == "redis":
+            return RedisStore(prefix, _redis(options.get("url", DEFAULT_STORES["redis"]["url"])))
         raise ValueError(f"Pilote de cache inconnu : {driver!r} (store {name!r}).")
 
     def __getattr__(self, name: str):

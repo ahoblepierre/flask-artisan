@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-STORES = ["array", "file"]
+STORES = ["array", "file", "redis"]
 
 
 class Clock:
@@ -51,3 +51,11 @@ def store(request, cache_app, tmp_path):
     if request.param == "redis":
         request.getfixturevalue("fake_redis")
     return cache_app.make("cache").store()
+
+
+@pytest.fixture
+def fake_redis(monkeypatch):
+    fakeredis = pytest.importorskip("fakeredis")
+    client = fakeredis.FakeRedis(server=fakeredis.FakeServer())
+    monkeypatch.setattr("flask_artisan.cache._redis", lambda url: client)
+    return client
