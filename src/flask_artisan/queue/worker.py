@@ -35,7 +35,11 @@ def rq_queue(connection: dict, name: str):
 def enqueue(connection: dict, payload: dict, options: dict) -> str:
     rq = require_rq()
     queue = rq_queue(connection, options["queue"] or "default")
-    kwargs = {"job_timeout": options["timeout"], "description": payload["class"]}
+    kwargs = {
+        "job_timeout": options["timeout"],
+        "description": payload["class"],
+        "meta": {"tries": options["tries"]},  # pour que queue:retry rende tous les essais
+    }
     if options["tries"] > 1:
         backoff = options["backoff"]
         kwargs["retry"] = rq.Retry(

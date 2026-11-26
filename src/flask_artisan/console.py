@@ -9,6 +9,8 @@ import click
 from flask import current_app
 from flask.cli import AppGroup, with_appcontext
 
+from flask_artisan.queue.commands import COMMANDS as QUEUE_COMMANDS
+
 STUBS = Path(__file__).parent / "stubs"
 
 
@@ -254,6 +256,7 @@ COMMANDS = [
     make_listener,
     make_mail,
     route_list,
+    *QUEUE_COMMANDS,
 ]
 
 
