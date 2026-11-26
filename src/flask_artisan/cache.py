@@ -11,7 +11,9 @@ import math
 import os
 import re
 import tempfile
+import threading
 import time
+from contextlib import contextmanager
 from datetime import timedelta
 from functools import cache
 from pathlib import Path
@@ -21,6 +23,11 @@ from flask import current_app
 from flask.cli import with_appcontext
 
 from flask_artisan.queue.serialization import dump, load
+
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
 
 __all__ = ["ArrayStore", "CacheManager", "FileStore", "RedisStore", "Store", "default_prefix"]
 
@@ -79,6 +86,10 @@ class Store:
         raise NotImplementedError
 
     def _increment(self, k: str, by: int) -> int:
+        raise NotImplementedError
+
+    def _delete_if(self, k: str, text: str) -> bool:
+        """Supprime seulement si la valeur stockée vaut `text` (atomique)."""
         raise NotImplementedError
 
     def _flush(self) -> None:
@@ -188,6 +199,7 @@ class ArrayStore(Store):
     def __init__(self, prefix: str):
         super().__init__(prefix)
         self._data: dict[str, tuple[float | None, str]] = {}
+        self._mutex = threading.Lock()  # un processus servi par plusieurs threads
 
     def _alive(self, k: str):
         entry = self._data.get(k)
@@ -204,24 +216,33 @@ class ArrayStore(Store):
         self._data[k] = (None if seconds is None else time.time() + seconds, text)
 
     def _add(self, k, text, seconds):
-        if self._alive(k):
-            return False
-        self._put(k, text, seconds)
-        return True
+        with self._mutex:
+            if self._alive(k):
+                return False
+            self._put(k, text, seconds)
+            return True
 
     def _delete(self, k):
         return self._data.pop(k, None) is not None
 
     def _pull(self, k):
-        text = self._get(k)
-        self._data.pop(k, None)
-        return text
+        with self._mutex:
+            text = self._get(k)
+            self._data.pop(k, None)
+            return text
 
     def _increment(self, k, by):
-        entry = self._alive(k)
-        expires, value = (entry[0], _as_int(k, entry[1])) if entry else (None, 0)
-        self._data[k] = (expires, json.dumps(value + by))
-        return value + by
+        with self._mutex:
+            entry = self._alive(k)
+            expires, value = (entry[0], _as_int(k, entry[1])) if entry else (None, 0)
+            self._data[k] = (expires, json.dumps(value + by))
+            return value + by
+
+    def _delete_if(self, k, text):
+        with self._mutex:
+            if self._get(k) != text:
+                return False
+            return self._delete(k)
 
     def _flush(self):
         self._data.clear()
@@ -294,12 +315,28 @@ class FileStore(Store):
     def _put(self, k, text, seconds):
         self._write(k, None if seconds is None else time.time() + seconds, text)
 
+    @contextmanager
+    def _locked(self):
+        """Section critique entre processus d'une même machine : flock sur `.lock` du dossier."""
+        if fcntl is None:
+            # shortcut: pas de flock sous Windows, add/increment/verrous non atomiques entre
+            # processus ; store redis si besoin.
+            yield
+            return
+        self.directory.mkdir(parents=True, exist_ok=True)
+        with open(self.directory / ".lock", "a") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(f, fcntl.LOCK_UN)
+
     def _add(self, k, text, seconds):
-        # shortcut: lecture puis écriture, pas atomique entre processus ; verrou de fichier si besoin.
-        if self._read(k):
-            return False
-        self._put(k, text, seconds)
-        return True
+        with self._locked():
+            if self._read(k):
+                return False
+            self._put(k, text, seconds)
+            return True
 
     def _delete(self, k):
         path = self._path(k)
@@ -308,16 +345,24 @@ class FileStore(Store):
         return existed
 
     def _pull(self, k):
-        text = self._get(k)
-        self._path(k).unlink(missing_ok=True)
-        return text
+        with self._locked():
+            text = self._get(k)
+            self._path(k).unlink(missing_ok=True)
+            return text
 
     def _increment(self, k, by):
-        # shortcut: non atomique entre processus (comme _add) ; préférez redis pour des compteurs.
-        entry = self._read(k)
-        expires, value = (entry[0], _as_int(k, entry[1])) if entry else (None, 0)
-        self._write(k, expires, json.dumps(value + by))
-        return value + by
+        with self._locked():
+            entry = self._read(k)
+            expires, value = (entry[0], _as_int(k, entry[1])) if entry else (None, 0)
+            self._write(k, expires, json.dumps(value + by))
+            return value + by
+
+    def _delete_if(self, k, text):
+        with self._locked():
+            if self._get(k) != text:
+                return False
+            self._path(k).unlink(missing_ok=True)
+            return True
 
     def _flush(self):
         # Seulement nos fichiers (nom = SHA-256) : ni un .gitignore, ni un log, ni une écriture
@@ -345,6 +390,11 @@ def _text(raw) -> str | None:
     return raw.decode() if isinstance(raw, bytes) else raw
 
 
+DELETE_IF = """
+if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end
+"""
+
+
 class RedisStore(Store):
     """Redis : TTL, `SET NX` et `INCRBY` natifs ; `flush` limité aux clés du préfixe."""
 
@@ -364,6 +414,10 @@ class RedisStore(Store):
 
     def _delete(self, k):
         return bool(self.client.delete(k))
+
+    def _delete_if(self, k, text):
+        # register_script est local (objet Script, EVALSHA avec repli sur EVAL) : pas d'aller-retour.
+        return bool(self.client.register_script(DELETE_IF)(keys=[k], args=[text]))
 
     def _pull(self, k):
         # GET + DEL dans une transaction : atomique sans exiger GETDEL (Redis ≥ 6.2).
