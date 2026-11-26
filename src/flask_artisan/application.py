@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from flask import Flask, current_app, has_app_context
+from jinja2 import ChoiceLoader, FileSystemLoader
 
 from flask_artisan.config import Repository
 from flask_artisan.console import COMMANDS, ArtisanGroup
@@ -26,6 +27,11 @@ class Application(Flask, Container):
             import_name=base.name,
             root_path=str(base),
             instance_path=str(base / "instance"),
+        )
+        # Vues de Laravel d'abord, puis le dossier de Flask ; affecté à l'instance (pas de
+        # redéfinition de Flask.jinja_loader dans la classe).
+        self.jinja_loader = ChoiceLoader(
+            [FileSystemLoader(base / "resources" / "views"), FileSystemLoader(base / "templates")]
         )
         self._base_path = base
         self._providers: dict[type, ServiceProvider] = {}
