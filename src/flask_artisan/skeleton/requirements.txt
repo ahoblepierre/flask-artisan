@@ -1,2 +1,2 @@
-flask-artisan>=0.2,<0.3
+flask-artisan>=0.3,<0.4
 pytest
