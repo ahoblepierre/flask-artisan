@@ -142,3 +142,9 @@ def test_top_level_exports():
     import flask_artisan
 
     assert {"Event", "event"} <= set(flask_artisan.__all__)
+
+
+@pytest.mark.parametrize("method", ["has_listeners", "forget"])
+def test_has_listeners_and_forget_require_a_class(app, method):
+    with pytest.raises(TypeError, match="classe"):
+        getattr(Event, method)("shipped")

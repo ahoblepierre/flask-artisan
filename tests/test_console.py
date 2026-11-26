@@ -264,3 +264,12 @@ def test_make_listener_with_missing_event_writes_nothing(artisan):
     assert result.exit_code != 0
     assert "app/events/typo.py" in result.output
     assert not app.base_path("app/listeners/mark_paid.py").exists()
+
+
+def test_make_listener_with_event_prints_listen_line(artisan):
+    _, run = artisan
+    assert run("make:event", "InvoicePaid").exit_code == 0
+    result = run("make:listener", "MarkPaid", "--event", "InvoicePaid")
+    assert "from app.listeners.mark_paid import MarkPaid" in result.output
+    assert "from app.events.invoice_paid import InvoicePaid" in result.output
+    assert "InvoicePaid: [MarkPaid]" in result.output

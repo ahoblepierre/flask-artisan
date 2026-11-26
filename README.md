@@ -405,6 +405,7 @@ def test_shipping_announces_the_order():
 | `assert_nothing_dispatched()` | aucun événement n'a été émis |
 | `dispatched(Classe)` | (pas une assertion) la liste des événements émis de cette classe |
 
+- Un événement simulé n'exécute aucun écouteur : `Event.dispatch` renvoie alors `[]`.
 - `Event.fake(OrderShipped, …)` ne simule que ces événements (et leurs sous-classes) ; les autres exécutent normalement leurs écouteurs. **Tous** restent vérifiables par les assertions.
 - Le fake est un mode du dispatcher de l'application : un service qui a reçu le dispatcher avant l'appel à `fake()` passe aussi par le fake.
 - Rappeler `Event.fake(...)` remplace le précédent et repart de zéro.
@@ -418,7 +419,7 @@ flask make:listener SendShipmentNotification --event OrderShipped   # app/listen
 flask make:listener Billing/MarkPaid --event Billing/InvoicePaid    # sous-dossiers permis
 ```
 
-`make:listener --event` refuse de créer l'écouteur si le fichier de l'événement n'existe pas encore, puis affiche la ligne à ajouter dans `listen`.
+Avec `--event`, le fichier de l'événement doit déjà exister : sinon rien n'est écrit et la commande indique le chemin attendu. Après création, `make:listener` affiche les imports et l'entrée à ajouter dans `listen`.
 
 ## Console
 

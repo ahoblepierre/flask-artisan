@@ -104,8 +104,10 @@ def make_event(name, force):
 @with_appcontext
 def make_listener(name, event_name, force):
     """Crée un écouteur d'événement dans app/listeners."""
+    _, cls = split_name(name, allow_dirs=True)
     if event_name is None:
         path = write_stub("app/listeners", name, "listener", force=force)
+        lines = [f"  {{VotreÉvénement: [{cls}]}}"]
     else:
         dirs, event_class = split_name(event_name, allow_dirs=True)
         module = ".".join(["app", "events", *dirs, class_to_file(event_class)])
@@ -123,11 +125,9 @@ def make_listener(name, event_name, force):
             event_import=f"from {module} import {event_class}",
             event_class=event_class,
         )
-    _, cls = split_name(name, allow_dirs=True)
-    click.echo(
-        'Ajoutez-le à "listen" dans app/providers/event_service_provider.py :\n'
-        f"  {_import_line(path, cls)}"
-    )
+        lines = [f"  from {module} import {event_class}", f"  {event_class}: [{cls}],"]
+    click.echo('Ajoutez-le à "listen" dans app/providers/event_service_provider.py :')
+    click.echo("\n".join([f"  {_import_line(path, cls)}", *lines]))
 
 
 @click.command("make:model")

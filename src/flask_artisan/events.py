@@ -15,6 +15,11 @@ def _describe(listener: Any) -> str:
     return getattr(listener, "__qualname__", repr(listener))
 
 
+def _require_class(event_class) -> None:
+    if not isinstance(event_class, type):
+        raise TypeError(f"Un événement se désigne par sa classe, pas {event_class!r}.")
+
+
 class Dispatcher:
     """Écouteurs par classe d'événement ; appelés dans l'ordre, de la classe exacte aux parents."""
 
@@ -28,8 +33,7 @@ class Dispatcher:
         self._recorded: list = []
 
     def listen(self, event_class: type, listener) -> None:
-        if not isinstance(event_class, type):
-            raise TypeError(f"Un événement s'écoute par sa classe, pas {event_class!r}.")
+        _require_class(event_class)
         listeners = listener if isinstance(listener, list) else [listener]
         normalized = [self._normalize(event_class, item) for item in listeners]
         self._listeners.setdefault(event_class, []).extend(normalized)
@@ -53,9 +57,11 @@ class Dispatcher:
         return results
 
     def has_listeners(self, event_class: type) -> bool:
+        _require_class(event_class)
         return any(self._listeners.get(cls) for cls in event_class.__mro__[:-1])
 
     def forget(self, event_class: type) -> None:
+        _require_class(event_class)
         self._listeners.pop(event_class, None)
 
     def fake(self, *event_classes: type) -> "EventFake":
