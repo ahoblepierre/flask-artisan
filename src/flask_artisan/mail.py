@@ -1,7 +1,9 @@
 """Mail façon Laravel : `Mailable`, `Mail.to(user).send(...)`, transports, `Mail.fake()`."""
 
+import copy
 import mimetypes
 import smtplib
+from collections import Counter
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid, parseaddr
 from pathlib import Path
@@ -9,7 +11,7 @@ from typing import Any
 
 from flask import current_app, has_app_context, render_template
 
-__all__ = ["Attachment", "Mailable", "Mailer"]
+__all__ = ["Attachment", "MailFake", "Mailable", "Mailer"]
 
 DEFAULT_MAILERS = {
     "smtp": {"transport": "smtp", "host": "127.0.0.1", "port": 2525},
@@ -182,6 +184,9 @@ class Mailer:
     def __init__(self, app):
         self._app = app
         self._arrays: dict[str, ArrayTransport] = {}  # seuls les `array` gardent un état
+        # Mode fake : un état du mailer, pour que les services qui le tiennent déjà le voient.
+        self._faking = False
+        self._recorded: list = []
 
     def _config(self, key: str, default=None):
         return self._app.make("config").get(f"mail.{key}", default)
@@ -211,7 +216,20 @@ class Mailer:
             return SmtpTransport(**{"host": "127.0.0.1", "port": 2525, **options})
         raise ValueError(f"Transport de mail inconnu : {kind!r} (mailer {name!r}).")
 
+    def fake(self) -> "MailFake":
+        """Enregistre les mails envoyés, sans les rendre ni les envoyer."""
+        self._faking = True
+        self._recorded = []
+        return MailFake(self, self._recorded)
+
     def _send(self, name: str | None, envelope: dict, mailable: Mailable) -> None:
+        if self._faking:
+            name, _ = self._mailer_config(name)
+            record = copy.copy(mailable)  # un même objet envoyé deux fois garde ses envois
+            record._recipients = {k: [a for _, a in v] for k, v in envelope.items()}
+            record._mailer = name
+            self._recorded.append(record)
+            return
         transport = self.transport(name)
         message = self._build(mailable, envelope)
         mailable._recipients = {k: [a for _, a in v] for k, v in envelope.items()}
@@ -263,3 +281,56 @@ class Mailer:
                 attachment.read(), maintype=maintype, subtype=subtype, filename=attachment.name
             )
         return message
+
+
+class MailFake:
+    """Assertions sur les mails envoyés depuis `Mail.fake()`."""
+
+    def __init__(self, mailer: Mailer, recorded: list):
+        self._mailer = mailer
+        self._recorded = recorded
+
+    def restore(self) -> None:
+        """Rend au mailer son fonctionnement normal ; les enregistrements restent lisibles."""
+        if self._mailer._recorded is self._recorded:  # pas remplacé par un fake() plus récent
+            self._mailer._faking = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.restore()
+
+    def sent(self, mailable_class: type) -> list:
+        return [m for m in self._recorded if isinstance(m, mailable_class)]
+
+    def _matching(self, mailable_class: type, callback) -> list:
+        mails = self.sent(mailable_class)
+        return mails if callback is None else [m for m in mails if callback(m)]
+
+    def assert_sent(self, mailable_class: type, callback=None) -> None:
+        if not self._matching(mailable_class, callback):
+            detail = " correspondant au callback" if callback else ""
+            raise AssertionError(
+                f"Mail {mailable_class.__name__}{detail} envoyé 0 fois, attendu au moins 1."
+            )
+
+    def assert_sent_times(self, mailable_class: type, times: int) -> None:
+        count = len(self.sent(mailable_class))
+        if count != times:
+            raise AssertionError(
+                f"Mail {mailable_class.__name__} envoyé {count} fois, attendu {times}."
+            )
+
+    def assert_not_sent(self, mailable_class: type, callback=None) -> None:
+        count = len(self._matching(mailable_class, callback))
+        if count:
+            raise AssertionError(
+                f"Mail {mailable_class.__name__} envoyé {count} fois, attendu aucun envoi."
+            )
+
+    def assert_nothing_sent(self) -> None:
+        counts = Counter(type(m).__name__ for m in self._recorded)
+        if counts:
+            sent = ", ".join(f"{name} envoyé {n} fois" for name, n in counts.items())
+            raise AssertionError(f"Aucun mail attendu, mais : {sent}.")
