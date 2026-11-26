@@ -10,6 +10,7 @@ from flask_artisan.console import COMMANDS, ArtisanGroup
 from flask_artisan.container import Container
 from flask_artisan.env import load_env_file
 from flask_artisan.events import Dispatcher
+from flask_artisan.mail import Mailer
 from flask_artisan.providers import ServiceProvider
 from flask_artisan.routing import Router
 
@@ -51,6 +52,9 @@ class Application(Flask, Container):
         events = Dispatcher(self)
         self.instance("events", events)
         self.instance(Dispatcher, events)
+        mailer = Mailer(self)
+        self.instance("mail", mailer)
+        self.instance(Mailer, mailer)
         Application.set_instance(self)
 
         self.cli = ArtisanGroup(self.name, app=self)
