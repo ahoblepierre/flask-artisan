@@ -10,6 +10,7 @@ import logging
 import math
 import os
 import re
+import secrets
 import tempfile
 import threading
 import time
@@ -29,7 +30,16 @@ try:
 except ImportError:  # Windows
     fcntl = None
 
-__all__ = ["ArrayStore", "CacheManager", "FileStore", "RedisStore", "Store", "default_prefix"]
+__all__ = [
+    "ArrayStore",
+    "CacheManager",
+    "FileStore",
+    "Lock",
+    "LockTimeoutError",
+    "RedisStore",
+    "Store",
+    "default_prefix",
+]
 
 logger = logging.getLogger("flask_artisan.cache")
 
@@ -48,6 +58,8 @@ PUBLIC = (
     "increment",
     "decrement",
     "flush",
+    "lock",
+    "restore_lock",
 )
 
 
@@ -184,6 +196,65 @@ class Store:
 
     def flush(self) -> None:
         self._flush()
+
+    def lock(self, name: str, seconds=0, owner: str | None = None) -> "Lock":
+        return Lock(self, name, seconds, owner)
+
+    def restore_lock(self, name: str, owner: str) -> "Lock":
+        """Le verrou `name` de `owner` (pris ailleurs : autre requête, job) pour le libérer."""
+        return Lock(self, name, 0, owner)
+
+
+class LockTimeoutError(Exception):
+    """Verrou toujours pris : `block` a attendu en vain, ou `with` l'a trouvé pris."""
+
+
+class Lock:
+    """Verrou dans le cache : pris par `add`, libéré seulement par son propriétaire."""
+
+    def __init__(self, store: Store, name: str, seconds=0, owner: str | None = None):
+        if not isinstance(name, str):
+            raise TypeError(f"Un nom de verrou est une chaîne, pas {name!r}.")
+        self.store, self.name = store, name
+        self.owner = owner or secrets.token_hex(16)
+        seconds = _seconds(seconds)
+        self._ttl = seconds if seconds and seconds > 0 else None  # 0 : sans expiration
+        self._k = store._key("lock:" + name)
+        self._text = store._encode(name, self.owner)  # JSON : la lecture tolérante le lit
+
+    def _run(self, callback):
+        try:
+            return callback()
+        finally:
+            self.release()
+
+    def get(self, callback=None):
+        acquired = self.store._add(self._k, self._text, self._ttl)
+        if callback is None or not acquired:
+            return acquired
+        return self._run(callback)
+
+    def block(self, seconds, callback=None):
+        deadline = time.time() + seconds
+        while not self.store._add(self._k, self._text, self._ttl):
+            if time.time() >= deadline:
+                raise LockTimeoutError(f"Verrou {self.name!r} toujours pris après {seconds} s.")
+            time.sleep(0.25)
+        return True if callback is None else self._run(callback)
+
+    def release(self) -> bool:
+        return self.store._delete_if(self._k, self._text)
+
+    def force_release(self) -> None:
+        self.store._delete(self._k)
+
+    def __enter__(self):
+        if not self.get():
+            raise LockTimeoutError(f"Verrou {self.name!r} déjà pris.")
+        return self
+
+    def __exit__(self, *exc):
+        self.release()
 
 
 def _as_int(k: str, text: str) -> int:
