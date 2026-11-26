@@ -67,7 +67,8 @@ extend-exclude = ["*.md"]  # ruff formate aussi les blocs de code Markdown : doc
 [tool.ruff.lint.per-file-ignores]
 # Kernels HTTP : listes et dicts en attributs de classe, par convention (comme Laravel).
 "**/kernel.py" = ["RUF012"]
-"**/models/*.py" = ["RUF012"]  # fillable, hidden : listes en attributs de classe (Eloquent)
+"**/models/*.py" = ["RUF012"]
+"**/event_service_provider.py" = ["RUF012"]  # listen : dict en attribut de classe  # fillable, hidden : listes en attributs de classe (Eloquent)
 "tests/*" = ["RUF012"]
 
 [tool.pytest.ini_options]

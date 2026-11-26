@@ -1,4 +1,5 @@
 from app.providers.app_service_provider import AppServiceProvider
+from app.providers.event_service_provider import EventServiceProvider
 from app.providers.route_service_provider import RouteServiceProvider
 
 from flask_artisan import env
@@ -14,6 +15,7 @@ config = {
     "providers": [
         DatabaseServiceProvider,
         AuthServiceProvider,
+        EventServiceProvider,
         AppServiceProvider,
         RouteServiceProvider,
     ],
