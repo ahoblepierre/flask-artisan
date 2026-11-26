@@ -103,3 +103,12 @@ def test_failed_commands_cover_every_queue(rq_app):
     rq_app.work(("audio",))
     assert "1 job(s)" in cli(rq_app, "queue:flush").output
     assert "Aucun job en échec" in cli(rq_app, "queue:failed").output
+
+
+def test_retry_all_skips_missing_job(rq_app):
+    lost, kept = Boom.dispatch(), Boom.dispatch()
+    rq_app.work()
+    rq_app.redis.delete(f"rq:job:{lost}")
+    result = cli(rq_app, "queue:retry", "all")
+    assert result.exit_code == 0, result.output
+    assert lost in result.output and f"Remis en file : {kept}" in result.output

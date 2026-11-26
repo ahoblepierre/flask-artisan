@@ -97,3 +97,26 @@ def test_sync_keeps_caller_session(queue_app):
     db.session.add(pending)
     Ping.dispatch("a")
     assert pending in db.session  # le job sync ne retire pas la session de l'appelant
+
+
+def test_empty_backoff_list(queue_app):
+    job = Ping("a")
+    job.tries, job.backoff = 3, []
+    assert QueueManager._options(job)["backoff"] == [0, 0]
+
+
+def test_delay_rounds_up():
+    assert Ping("a").delay(0.5).delay_seconds == 1
+    assert Ping("a").delay(timedelta(seconds=1.2)).delay_seconds == 2
+
+
+def test_sync_outside_app_context_keeps_thread_session(db_app):
+    from . import models  # noqa: F401
+
+    app = db_app()
+    app.make("db").create_all()
+    session = app.make("db").session
+    pending = QPodcast(title="pending")
+    session.add(pending)
+    app.make("queue").push(Ping("a"))
+    assert pending in app.make("db").session

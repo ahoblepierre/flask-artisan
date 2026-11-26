@@ -116,3 +116,8 @@ def test_import_class_rejects_non_class():
 def test_model_marker_must_be_model():
     with pytest.raises(TypeError):
         load({"__model__": "collections.OrderedDict", "id": 1})
+
+
+def test_model_marker_must_be_mapped_model():
+    with pytest.raises(TypeError):
+        load({"__model__": "flask_artisan.database.model.Model", "id": 1})

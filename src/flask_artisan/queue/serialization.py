@@ -79,9 +79,14 @@ def load(value: Any) -> Any:
         return [load(item) for item in value]
     if isinstance(value, dict):
         if "__model__" in value:
+            from sqlalchemy import inspect
+
             from flask_artisan.database.model import Model
 
-            return import_class(value["__model__"], Model).find_or_fail(value["id"])
+            cls = import_class(value["__model__"], Model)
+            if inspect(cls, raiseerr=False) is None:  # Model lui-même, ou une classe non mappée
+                raise TypeError(f"{value['__model__']!r} n'est pas un modèle mappé.")
+            return cls.find_or_fail(value["id"])
         if "__datetime__" in value:
             return datetime.fromisoformat(value["__datetime__"])
         if "__date__" in value:

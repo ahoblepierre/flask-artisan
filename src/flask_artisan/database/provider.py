@@ -1,3 +1,5 @@
+from flask import g
+
 from flask_artisan.database.json import ModelJSONProvider
 from flask_artisan.database.manager import DatabaseManager
 from flask_artisan.database.migrations import COMMANDS, import_models
@@ -11,7 +13,11 @@ class DatabaseServiceProvider(ServiceProvider):
         manager = DatabaseManager(self.app)
         self.app.instance("db", manager)
         self.app.instance(DatabaseManager, manager)
-        self.app.teardown_appcontext(lambda exc: manager.remove())
+        # Sauf si le contexte a été poussé pour un job sync hors contexte : la session du thread
+        # appartient alors à l'appelant (script), qui n'a pas fini de s'en servir.
+        self.app.teardown_appcontext(
+            lambda exc: None if g.get("_artisan_keep_db_session") else manager.remove()
+        )
         # Flask crée son fournisseur JSON dans __init__ : on le remplace ici.
         self.app.json = ModelJSONProvider(self.app)
         for cmd in COMMANDS:

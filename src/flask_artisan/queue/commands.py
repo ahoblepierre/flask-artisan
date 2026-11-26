@@ -113,9 +113,15 @@ def queue_retry(ids, connection_name):
     if _no_queue(connection_name):
         return
     failed = _failed(_rq_connection(connection_name)[1])
-    targets = list(failed) if list(ids) == ["all"] else ids
-    for job_id in targets:
-        job = _fetch(failed, job_id)
+    retry_all = list(ids) == ["all"]
+    for job_id in list(failed) if retry_all else ids:
+        try:
+            job = _fetch(failed, job_id)
+        except click.ClickException as exc:
+            if not retry_all:
+                raise
+            click.echo(f"Ignoré : {exc.message}", err=True)  # un job perdu n'arrête pas les autres
+            continue
         tries = job.meta.get("tries", 1)
         job.retries_left = tries - 1 if tries > 1 else None  # tous les essais, comme Laravel
         job.save()

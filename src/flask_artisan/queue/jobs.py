@@ -1,9 +1,11 @@
 """Les jobs : `Job`, son exécution (contexte, injection, `failed`)."""
 
 import logging
+import math
+import sys
 from datetime import timedelta
 
-from flask import current_app, has_app_context
+from flask import current_app, g, has_app_context
 
 from flask_artisan.mail import Mailable, Mailer
 from flask_artisan.queue.serialization import class_path, import_class
@@ -33,7 +35,7 @@ class Job:
 
     def delay(self, delay: float | timedelta) -> "Job":
         seconds = delay.total_seconds() if isinstance(delay, timedelta) else delay
-        self._delay = int(seconds)
+        self._delay = math.ceil(seconds)  # 0.5 s ne doit pas devenir « tout de suite »
         return self
 
     @property
@@ -67,6 +69,7 @@ def execute(app, job: Job, *, final: bool) -> None:
     """
     if not (has_app_context() and current_app._get_current_object() is app):
         with app.app_context():
+            g._artisan_keep_db_session = True  # la session du thread reste à l'appelant
             _call(app, job, final)
     else:
         _call(app, job, final)
@@ -139,6 +142,10 @@ class CallQueuedListener(Job):
             raise TypeError(f"Méthode d'écouteur invalide : {self.method!r}.")
         listener_class = import_class(self.listener, ShouldQueue)
         event_class = import_class(self.event_class, object)
+        # Un événement est une classe de l'application, jamais de la bibliothèque standard.
+        root = event_class.__module__.split(".")[0]
+        if root in sys.stdlib_module_names or root == "builtins":
+            raise TypeError(f"Classe d'événement refusée : {self.event_class!r}.")
         event = event_class.__new__(event_class)
         for key, value in self.event_data.items():
             if key.startswith("_"):

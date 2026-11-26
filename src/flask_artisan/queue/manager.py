@@ -79,6 +79,7 @@ class QueueManager:
         tries = max(int(job.tries), 1)
         backoff = job.backoff if isinstance(job.backoff, list) else [job.backoff]
         if tries > 1:  # complétée avec la dernière valeur, comme Laravel
+            backoff = backoff or [0]
             backoff = (list(backoff) + [backoff[-1]] * tries)[: tries - 1]
         return {
             "queue": job.queue_name,  # None : file de la connexion

@@ -773,7 +773,7 @@ class SendShipmentNotification(ShouldQueue):
         Mail.to(event.order.user).send(OrderShippedMail(event.order))
 ```
 
-Il se déclare comme les autres écouteurs (dans `listen`, en classe ou en tuple `(Classe, "méthode")`). L'événement doit être sérialisable (mêmes règles qu'un job) ; `Event.dispatch` renvoie `None` pour cet écouteur, qui ne peut pas arrêter la propagation.
+Il se déclare comme les autres écouteurs (dans `listen`, en classe ou en tuple `(Classe, "méthode")`). L'événement doit être une classe de l'application et être sérialisable (mêmes règles qu'un job) ; `Event.dispatch` renvoie `None` pour cet écouteur, qui ne peut pas arrêter la propagation.
 
 ### Tester
 

@@ -69,3 +69,11 @@ def test_forged_listener_rejected(queue_app):
     job.listener, job.method = f"{QueuedListener.__module__}.QueuedListener", "_secret"
     with pytest.raises(TypeError):
         queue_app.call(job.handle)
+
+
+def test_forged_stdlib_event_class_rejected(queue_app):
+    job = CallQueuedListener.__new__(CallQueuedListener)
+    job.listener, job.method = f"{QueuedListener.__module__}.QueuedListener", "handle"
+    job.event_class, job.event_data = "subprocess.Popen", {}
+    with pytest.raises(TypeError, match="subprocess"):
+        queue_app.call(job.handle)
