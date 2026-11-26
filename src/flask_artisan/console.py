@@ -9,6 +9,7 @@ import click
 from flask import current_app
 from flask.cli import AppGroup, with_appcontext
 
+from flask_artisan.cache import cache_clear
 from flask_artisan.queue.commands import COMMANDS as QUEUE_COMMANDS
 
 STUBS = Path(__file__).parent / "stubs"
@@ -269,6 +270,7 @@ COMMANDS = [
     make_job,
     route_list,
     *QUEUE_COMMANDS,
+    cache_clear,
 ]
 
 

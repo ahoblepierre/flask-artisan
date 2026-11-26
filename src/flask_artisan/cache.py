@@ -16,6 +16,10 @@ from datetime import timedelta
 from functools import cache
 from pathlib import Path
 
+import click
+from flask import current_app
+from flask.cli import with_appcontext
+
 from flask_artisan.queue.serialization import dump, load
 
 __all__ = ["ArrayStore", "CacheManager", "FileStore", "RedisStore", "Store"]
@@ -406,3 +410,17 @@ class CacheManager:
         if name in PUBLIC:
             return getattr(self.store(), name)
         raise AttributeError(name)
+
+
+@click.command("cache:clear")
+@click.argument("store_name", required=False)
+@with_appcontext
+def cache_clear(store_name):
+    """Vide un store de cache (défaut : le store par défaut)."""
+    manager = current_app.make("cache")
+    name = store_name or manager._config("default", "file")
+    try:
+        manager.store(name).flush()
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from None
+    click.echo(f"Cache vidé : {name}.")
