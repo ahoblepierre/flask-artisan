@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [Non publié]
+
+### Ajouté
+
+- **Validation** : `FormRequest` (`rules`, `authorize`, `messages`) validée à l'injection dans les controllers, `Validator` et `validate()`, règles façon Laravel (présence, types, taille, valeurs, `unique`/`exists`), réponses 422 / 403 en JSON, `flask make:request`.
+
+### Modifié
+
+- Squelette : `/api/login` passe par `LoginRequest` et répond 422 (au lieu de 401) à un corps sans `email`/`password` valides.
+
 ## [0.1.0] - 2026-11-19
 
 Première version publique.
