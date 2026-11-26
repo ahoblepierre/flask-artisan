@@ -16,3 +16,8 @@ def config(key: str | None = None, default: Any = None) -> Any:
 
 def base_path(path: str = "") -> Path:
     return Application.get_instance().base_path(path)
+
+
+def event(obj) -> list:
+    """Émet un événement : raccourci de Event.dispatch(obj)."""
+    return Application.get_instance().make("events").dispatch(obj)

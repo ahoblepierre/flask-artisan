@@ -36,3 +36,7 @@ class DB(Facade):
 class Auth(Facade):
     # Accesseur en chaîne : la façade n'importe pas flask_artisan.auth (ni ses tables).
     accessor = "auth"
+
+
+class Event(Facade):
+    accessor = "events"
