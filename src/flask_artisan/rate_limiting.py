@@ -3,9 +3,14 @@
 Les compteurs vivent dans le cache (store `cache.limiter`, sinon le store par défaut).
 """
 
+import hashlib
 import time
 
-__all__ = ["RateLimiter"]
+from flask import current_app
+
+from flask_artisan.middleware import Middleware
+
+__all__ = ["RateLimiter", "ThrottleRequests"]
 
 
 class RateLimiter:
@@ -53,3 +58,53 @@ class RateLimiter:
         self.hit(key, decay_seconds)
         result = callback()
         return True if result is None else result
+
+
+def _positive(value, what: str) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = 0
+    if number <= 0:
+        raise ValueError(
+            f"throttle : {what} doit être un entier positif (throttle:<max>,<minutes>), "
+            f"reçu {value!r}."
+        )
+    return number
+
+
+def _identity(request) -> str:
+    # Seulement un utilisateur déjà résolu par un guard (middleware `auth` placé avant) :
+    # throttle ne lit ni session ni token lui-même (pas de requête SQL, pas de Vary: Cookie).
+    for name, user in request.environ.get("flask_artisan.auth", {}).items():
+        if name.startswith("user:") and user is not None:
+            return f"user:{user.id}"
+    return f"ip:{request.remote_addr}"
+
+
+class ThrottleRequests(Middleware):
+    """`throttle:<max>,<minutes>` : au-delà de `max` requêtes par fenêtre, réponse 429."""
+
+    def handle(self, request, next, max_attempts="60", decay_minutes="1"):
+        limit = _positive(max_attempts, "le nombre de requêtes")
+        minutes = _positive(decay_minutes, "la durée en minutes")
+        signature = f"{limit}|{minutes}|{_identity(request)}"
+        key = "throttle:" + hashlib.sha1(signature.encode()).hexdigest()
+        limiter = current_app.make(RateLimiter)
+
+        if limiter.too_many_attempts(key, limit):
+            retry = limiter.available_in(key)
+            headers = {
+                "Retry-After": str(retry),
+                "X-RateLimit-Limit": str(limit),
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset": str(int(time.time()) + retry),
+            }
+            return current_app.make_response(({"message": "Too Many Attempts."}, 429, headers))
+
+        limiter.hit(key, minutes * 60)
+        response = next(request)
+        # setdefault : un throttle plus proche de la route (plus strict) a déjà répondu.
+        response.headers.setdefault("X-RateLimit-Limit", str(limit))
+        response.headers.setdefault("X-RateLimit-Remaining", str(limiter.remaining(key, limit)))
+        return response
