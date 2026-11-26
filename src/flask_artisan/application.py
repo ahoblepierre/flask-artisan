@@ -12,6 +12,7 @@ from flask_artisan.env import load_env_file
 from flask_artisan.events import Dispatcher
 from flask_artisan.mail import Mailer
 from flask_artisan.providers import ServiceProvider
+from flask_artisan.queue import QueueManager
 from flask_artisan.routing import Router
 
 
@@ -55,6 +56,9 @@ class Application(Flask, Container):
         mailer = Mailer(self)
         self.instance("mail", mailer)
         self.instance(Mailer, mailer)
+        queue = QueueManager(self)
+        self.instance("queue", queue)
+        self.instance(QueueManager, queue)
         Application.set_instance(self)
 
         self.cli = ArtisanGroup(self.name, app=self)

@@ -44,3 +44,7 @@ class Event(Facade):
 
 class Mail(Facade):
     accessor = "mail"
+
+
+class Queue(Facade):
+    accessor = "queue"
