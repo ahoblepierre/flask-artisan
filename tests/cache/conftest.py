@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-STORES = ["array"]
+STORES = ["array", "file"]
 
 
 class Clock:

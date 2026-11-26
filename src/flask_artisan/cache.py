@@ -4,16 +4,20 @@ Valeurs en JSON (jamais de pickle), avec la sérialisation des queues : un modè
 son identifiant et relu en base à la lecture.
 """
 
+import hashlib
 import json
 import logging
 import math
+import os
 import re
+import tempfile
 import time
 from datetime import timedelta
+from pathlib import Path
 
 from flask_artisan.queue.serialization import dump, load
 
-__all__ = ["ArrayStore", "CacheManager", "Store"]
+__all__ = ["ArrayStore", "CacheManager", "FileStore", "Store"]
 
 logger = logging.getLogger("flask_artisan.cache")
 
@@ -218,6 +222,83 @@ class ArrayStore(Store):
         self._data.clear()
 
 
+class FileStore(Store):
+    """Un fichier JSON par clé dans `directory`, nommé par le SHA-256 de la clé."""
+
+    def __init__(self, prefix: str, directory: Path):
+        super().__init__(prefix)
+        self.directory = Path(directory)
+
+    def _path(self, k: str) -> Path:
+        return self.directory / hashlib.sha256(k.encode()).hexdigest()
+
+    def _read(self, k: str) -> tuple[float | None, str] | None:
+        path = self._path(k)
+        try:
+            entry = json.loads(path.read_text())
+            expires, text = entry["expires"], entry["value"]
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError, KeyError, TypeError):
+            path.unlink(missing_ok=True)  # fichier corrompu : absent
+            logger.warning("Cache : fichier illisible pour %r, supprimé.", k)
+            return None
+        if expires is not None and expires <= time.time():
+            path.unlink(missing_ok=True)
+            return None
+        return expires, text
+
+    def _write(self, k: str, expires: float | None, text: str) -> None:
+        self.directory.mkdir(parents=True, exist_ok=True)
+        # Fichier temporaire puis os.replace : un lecteur ne voit jamais un fichier tronqué.
+        fd, tmp = tempfile.mkstemp(dir=self.directory, prefix=".tmp-")
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump({"expires": expires, "value": text}, f)
+            os.replace(tmp, self._path(k))
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+
+    def _get(self, k):
+        entry = self._read(k)
+        return entry[1] if entry else None
+
+    def _put(self, k, text, seconds):
+        self._write(k, None if seconds is None else time.time() + seconds, text)
+
+    def _add(self, k, text, seconds):
+        # shortcut: lecture puis écriture, pas atomique entre processus ; verrou de fichier si besoin.
+        if self._read(k):
+            return False
+        self._put(k, text, seconds)
+        return True
+
+    def _delete(self, k):
+        path = self._path(k)
+        existed = self._read(k) is not None
+        path.unlink(missing_ok=True)
+        return existed
+
+    def _pull(self, k):
+        text = self._get(k)
+        self._path(k).unlink(missing_ok=True)
+        return text
+
+    def _increment(self, k, by):
+        # shortcut: non atomique entre processus (comme _add) ; préférez redis pour des compteurs.
+        entry = self._read(k)
+        expires, value = (entry[0], _as_int(k, entry[1])) if entry else (None, 0)
+        self._write(k, expires, json.dumps(value + by))
+        return value + by
+
+    def _flush(self):
+        if self.directory.is_dir():
+            for path in self.directory.iterdir():
+                if path.is_file():
+                    path.unlink(missing_ok=True)
+
+
 DEFAULT_STORES = {
     "array": {"driver": "array"},
     "file": {"driver": "file", "path": "storage/cache"},
@@ -252,6 +333,8 @@ class CacheManager:
             if store is None or store.prefix != prefix:
                 store = self._arrays[name] = ArrayStore(prefix)
             return store
+        if driver == "file":
+            return FileStore(prefix, self._app.base_path(options.get("path", "storage/cache")))
         raise ValueError(f"Pilote de cache inconnu : {driver!r} (store {name!r}).")
 
     def __getattr__(self, name: str):

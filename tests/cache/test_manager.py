@@ -34,7 +34,6 @@ def test_array_store_kept(cache_app, tmp_path):
     assert Cache.store("array").get("k") == 1
 
 
-@pytest.mark.xfail(strict=True, reason="pilote file : Task 2")
 def test_defaults_without_config(make_project):
     from flask_artisan.cache import FileStore
 
