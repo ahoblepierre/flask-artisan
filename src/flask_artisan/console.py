@@ -157,6 +157,17 @@ def make_mail(name, force):
     )
 
 
+@click.command("make:job")
+@click.argument("name")
+@force_option
+@with_appcontext
+def make_job(name, force):
+    """Crée un job (file d'attente) dans app/jobs."""
+    path = write_stub("app/jobs", name, "job", force=force)
+    _, cls = split_name(name, allow_dirs=True)
+    click.echo(f"Envoyez-le :\n  {_import_line(path, cls)}\n  {cls}.dispatch(...)")
+
+
 @click.command("make:model")
 @click.argument("name")
 @force_option
@@ -255,6 +266,7 @@ COMMANDS = [
     make_event,
     make_listener,
     make_mail,
+    make_job,
     route_list,
     *QUEUE_COMMANDS,
 ]
