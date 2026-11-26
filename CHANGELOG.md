@@ -2,6 +2,19 @@
 
 Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [Non publié]
+
+### Ajouté
+
+- **Limitation de débit** : middleware `throttle:<max>,<minutes>` (429 avec `Retry-After`, en-têtes `X-RateLimit-*`, par utilisateur après `auth`, sinon par IP), façade `RateLimiter` (`hit`, `attempts`, `too_many_attempts`, `remaining`, `available_in`, `clear`, `attempt`), store des compteurs `cache.limiter`.
+- **Verrous** : `Cache.lock(name, seconds)` (`get`, `block`, `release` réservé au propriétaire, `force_release`, `with`), `Cache.restore_lock(name, owner)`, `LockTimeoutError`.
+- `app.trusted_proxies` (`TRUSTED_PROXIES`) : IP du client lue derrière un proxy.
+
+### Modifié
+
+- Cache : `add`, `increment` et `pull` du store `file` atomiques entre processus d'une même machine (`flock`, hors Windows) ; store `array` sûr entre threads.
+- Squelette : alias `throttle`, groupe `api` limité à 60 requêtes par minute, `/api/login` à 5 ; `TRUSTED_PROXIES` dans `.env.example`.
+
 ## [0.6.0] - 2026-11-26
 
 ### Ajouté

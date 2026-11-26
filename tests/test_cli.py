@@ -129,6 +129,7 @@ def test_generated_project_migrates(project):
     assert {"users", "personal_access_tokens"} <= tables
 
 
+# 5 POST /api/login exactement : la route est limitée à 5 par minute (throttle:5,1).
 AUTH_FLOW = """
 from wsgi import app
 from app.models.user import User
@@ -161,6 +162,25 @@ def test_generated_api_auth_flow(project):
     assert out.stdout.strip() == "OK", out.stdout + out.stderr
 
 
+THROTTLE_FLOW = """
+from wsgi import app
+c = app.test_client()
+for _ in range(5):
+    assert c.post("/api/login", json={"email": "a@x.org", "password": "bad"}).status_code == 401
+r = c.post("/api/login", json={"email": "a@x.org", "password": "bad"})
+assert r.status_code == 429 and r.headers["Retry-After"], (r.status_code, r.data)
+print("OK")
+"""
+
+
+def test_generated_login_is_throttled(project):
+    for args in (("make:migration", "init"), ("migrate",)):
+        result = run(project, "-m", "flask", *args)
+        assert result.returncode == 0, result.stdout + result.stderr
+    out = run(project, "-c", THROTTLE_FLOW)
+    assert out.stdout.strip() == "OK", out.stdout + out.stderr
+
+
 def test_generated_project_console(project):
     from pathlib import Path
 
@@ -177,7 +197,7 @@ def test_generated_project_console(project):
     assert "app:send-emails : terminé." in result.stdout
     result = run(project, "-m", "flask", "route:list")
     assert result.returncode == 0, result.stdout + result.stderr
-    for text in ("api.login", "AuthController@login", "Authenticate:api"):
+    for text in ("api.login", "AuthController@login", "Authenticate:api", "ThrottleRequests:5,1"):
         assert text in result.stdout, result.stdout
     generated = [
         "app/http/controllers/photo_controller.py",
