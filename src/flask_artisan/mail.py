@@ -1,6 +1,7 @@
 """Mail façon Laravel : `Mailable`, `Mail.to(user).send(...)`, transports, `Mail.fake()`."""
 
 import mimetypes
+import smtplib
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid, parseaddr
 from pathlib import Path
@@ -127,6 +128,26 @@ class LogTransport:
         self.logger.info("Mail pour %s :\n%s", ", ".join(recipients), message.as_string())
 
 
+class SmtpTransport:
+    """Une connexion SMTP par envoi ; les erreurs de smtplib remontent telles quelles."""
+
+    def __init__(self, host, port, username=None, password=None, encryption=None, timeout=10, **_):
+        if encryption not in (None, "", "tls", "ssl"):
+            raise ValueError(f"MAIL_ENCRYPTION inconnu : {encryption!r} (tls, ssl ou vide).")
+        self.host, self.port, self.timeout = host, int(port), timeout
+        self.username, self.password = username, password
+        self.encryption = encryption or None
+
+    def send(self, message: EmailMessage, recipients: list[str]) -> None:
+        connect = smtplib.SMTP_SSL if self.encryption == "ssl" else smtplib.SMTP
+        with connect(self.host, self.port, timeout=self.timeout) as smtp:
+            if self.encryption == "tls":
+                smtp.starttls()
+            if self.username:
+                smtp.login(self.username, self.password or "")
+            smtp.send_message(message, to_addrs=recipients)
+
+
 class PendingMail:
     """`Mail.to(...).cc(...).bcc(...).send(mailable)`."""
 
@@ -186,6 +207,8 @@ class Mailer:
             return self._arrays.setdefault(name, ArrayTransport())
         if kind == "log":
             return LogTransport(self._app.logger)
+        if kind == "smtp":
+            return SmtpTransport(**{"host": "127.0.0.1", "port": 2525, **options})
         raise ValueError(f"Transport de mail inconnu : {kind!r} (mailer {name!r}).")
 
     def _send(self, name: str | None, envelope: dict, mailable: Mailable) -> None:
