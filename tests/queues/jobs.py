@@ -50,3 +50,33 @@ class Unserializable(Job):
 
     def handle(self):
         Record.append("ran")
+
+
+class Retried(Boom):
+    tries = 3
+
+
+class Backoff(Boom):
+    tries = 4
+    backoff = [5, 30]
+
+
+class BadFailedOnce(BadFailed):
+    pass
+
+
+class Slow(Ping):
+    timeout = 5
+
+
+class AddUncommitted(Job):
+    def handle(self):
+        from flask_artisan import DB
+
+        DB.session.add(QPodcast(title="pending"))
+        DB.session.flush()
+
+
+class CountPodcasts(Job):
+    def handle(self):
+        Record.append(QPodcast.query().count())

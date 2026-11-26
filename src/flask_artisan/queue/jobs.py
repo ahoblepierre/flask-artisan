@@ -9,7 +9,7 @@ logger = logging.getLogger("flask_artisan.queue")
 class Job:
     """Un travail à exécuter en arrière-plan : surchargez `handle()` (dépendances injectées)."""
 
-    queue: str = "default"
+    queue: str | None = None  # None : la file de la connexion ("default")
     tries: int = 1
     backoff: int | list[int] = 0
     timeout: int = 60
@@ -32,7 +32,7 @@ class Job:
         return self
 
     @property
-    def queue_name(self) -> str:
+    def queue_name(self) -> str | None:
         return getattr(self, "_queue", None) or self.queue
 
     @property

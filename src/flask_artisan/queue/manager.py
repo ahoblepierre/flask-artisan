@@ -16,6 +16,19 @@ class SyncDriver:
         execute(self._app, restore(serialize(job), Job), final=True)
 
 
+class RqDriver:
+    """Envoie le job à RQ (Redis), exécuté plus tard par `flask queue:work`."""
+
+    def __init__(self, connection: dict):
+        self._connection = connection
+
+    def push(self, job: Job, options: dict) -> str:
+        from flask_artisan.queue import worker
+
+        options = {**options, "queue": options["queue"] or self._connection.get("queue")}
+        return worker.enqueue(self._connection, serialize(job), options)
+
+
 class _Connection:
     def __init__(self, manager: "QueueManager", name: str | None):
         self._manager = manager
@@ -46,6 +59,8 @@ class QueueManager:
         kind = options.get("driver")
         if kind == "sync":
             return SyncDriver(self._app)
+        if kind == "rq":
+            return RqDriver(options)
         raise ValueError(f"Pilote de file inconnu : {kind!r} (connexion {name!r}).")
 
     @staticmethod
@@ -55,7 +70,7 @@ class QueueManager:
         if tries > 1:  # complétée avec la dernière valeur, comme Laravel
             backoff = (list(backoff) + [backoff[-1]] * tries)[: tries - 1]
         return {
-            "queue": job.queue_name,
+            "queue": job.queue_name,  # None : file de la connexion
             "tries": tries,
             "backoff": [int(b) for b in backoff],
             "timeout": int(job.timeout),

@@ -64,7 +64,7 @@ def test_unserializable_job_raises_before_running(queue_app):
 
 def test_options_and_properties():
     job = Ping("a")
-    assert (job.queue_name, job.delay_seconds) == ("default", 0)
+    assert (job.queue_name, job.delay_seconds) == (None, 0)
     assert job.on_queue("x").delay(timedelta(minutes=1)) is job
     assert (job.queue_name, job.delay_seconds) == ("x", 60)
     assert Ping("a").delay(5).delay_seconds == 5
