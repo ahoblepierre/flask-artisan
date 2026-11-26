@@ -64,6 +64,6 @@ def run(payload: dict) -> None:
     current = get_current_job()
     # retries_left : essais restants après celui-ci ; 0 ou None = dernier essai.
     final = current is None or not current.retries_left
-    with app.app_context():
+    with app.app_context():  # contexte propre au job : sa fin retire la session de base
         job = restore(payload, Job)
-    execute(app, job, final=final)
+        execute(app, job, final=final)

@@ -90,6 +90,13 @@ class Dispatcher:
                 "(attendu : une classe avec handle(), un tuple (Classe, 'méthode') ou une fonction)."
             )
         app = self._app
+        from flask_artisan.queue.jobs import CallQueuedListener, ShouldQueue
+
+        if issubclass(cls, ShouldQueue):
+            # Mis en file : exécuté par le worker (ou tout de suite avec sync) ; renvoie None.
+            return lambda event: (
+                app.make("queue").push(CallQueuedListener.wrap(cls, method, event)) and None
+            )
         # Construit à chaque émission, comme Laravel : l'écouteur reçoit ses dépendances fraîches.
         return lambda event: getattr(app.make(cls), method)(event)
 

@@ -3,6 +3,8 @@
 import logging
 from datetime import timedelta
 
+from flask import current_app, has_app_context
+
 from flask_artisan.mail import Mailable, Mailer
 from flask_artisan.queue.serialization import class_path, import_class
 
@@ -58,17 +60,28 @@ class Job:
 
 
 def execute(app, job: Job, *, final: bool) -> None:
-    """Exécute `handle` dans un contexte d'application ; `failed` si c'était le dernier essai."""
-    with app.app_context():  # sa fin retire la session de base (teardown du provider)
-        try:
-            app.call(job.handle)
-        except Exception as exc:
-            if final:
-                try:
-                    job.failed(exc)
-                except Exception:
-                    logger.exception("Erreur dans %s.failed()", type(job).__name__)
-            raise
+    """Exécute `handle` ; `failed` si c'était le dernier essai.
+
+    Réutilise le contexte de l'appelant s'il est celui de l'app : un job sync ne doit pas retirer
+    la session de base de la requête (le worker, lui, pousse un contexte propre à chaque job).
+    """
+    if not (has_app_context() and current_app._get_current_object() is app):
+        with app.app_context():
+            _call(app, job, final)
+    else:
+        _call(app, job, final)
+
+
+def _call(app, job: Job, final: bool) -> None:
+    try:
+        app.call(job.handle)
+    except Exception as exc:
+        if final:
+            try:
+                job.failed(exc)
+            except Exception:
+                logger.exception("Erreur dans %s.failed()", type(job).__name__)
+        raise
 
 
 class SendQueuedMailable(Job):
@@ -94,3 +107,41 @@ class SendQueuedMailable(Job):
             kind: [tuple(a) for a in addresses] for kind, addresses in self.envelope.items()
         }
         mailer._send(self.mailer, envelope, mailable)
+
+
+class ShouldQueue:
+    """Marqueur : un écouteur qui en hérite est exécuté par la file, pas pendant `dispatch`.
+
+    Il peut porter `queue`, `tries`, `backoff` et `timeout`, comme un job.
+    """
+
+
+class CallQueuedListener(Job):
+    """Job du framework : appelle un écouteur `ShouldQueue` avec l'événement reconstruit."""
+
+    @classmethod
+    def wrap(cls, listener: type, method: str, event) -> "CallQueuedListener":
+        job = cls()
+        job.listener = class_path(listener)
+        job.method = method
+        job.event_class = class_path(type(event))
+        job.event_data = {k: v for k, v in vars(event).items() if not k.startswith("_")}
+        for setting in ("tries", "backoff", "timeout"):
+            if hasattr(listener, setting):
+                setattr(job, setting, getattr(listener, setting))
+        job.on_queue(getattr(listener, "queue", None))
+        return job
+
+    def handle(self) -> None:
+        from flask_artisan.helpers import app
+
+        if not isinstance(self.method, str) or self.method.startswith("_"):
+            raise TypeError(f"Méthode d'écouteur invalide : {self.method!r}.")
+        listener_class = import_class(self.listener, ShouldQueue)
+        event_class = import_class(self.event_class, object)
+        event = event_class.__new__(event_class)
+        for key, value in self.event_data.items():
+            if key.startswith("_"):
+                raise TypeError(f"Attribut invalide dans un événement en file : {key!r}.")
+            setattr(event, key, value)
+        getattr(app().make(listener_class), self.method)(event)

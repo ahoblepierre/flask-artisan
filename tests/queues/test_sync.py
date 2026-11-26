@@ -89,3 +89,11 @@ def test_defaults_without_config(make_project):
     with app.app_context():
         Ping.dispatch("z")
     assert Record == ["z"]
+
+
+def test_sync_keeps_caller_session(queue_app):
+    db = queue_app.make("db")
+    pending = QPodcast(title="pending")
+    db.session.add(pending)
+    Ping.dispatch("a")
+    assert pending in db.session  # le job sync ne retire pas la session de l'appelant
