@@ -101,3 +101,10 @@ def test_restore_and_superseded_fake(mail_app):
     new.restore()
     Mail.to("a@x.org").send(Hello("A"))
     assert len(Mail.transport("array").messages) == 1
+
+
+def test_original_mailable_gets_recipients_under_fake(mail_app):
+    m = Hello("A")
+    with Mail.fake():
+        Mail.to("a@x.org").send(m)
+    assert m.has_to("a@x.org")

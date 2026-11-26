@@ -148,7 +148,11 @@ class SmtpTransport:
     ):
         if encryption not in (None, "", "tls", "ssl"):
             raise ValueError(f"MAIL_ENCRYPTION inconnu : {encryption!r} (tls, ssl ou vide).")
-        self.host, self.port, self.timeout = host, int(port), timeout
+        try:
+            port = int(port)
+        except (TypeError, ValueError):
+            raise ValueError(f"MAIL_PORT invalide : {port!r} (un nombre, ex. 587).") from None
+        self.host, self.port, self.timeout = host, port, timeout
         self.username, self.password = username, password
         self.encryption = encryption or None
 
@@ -242,16 +246,17 @@ class Mailer:
         return MailFake(self, self._recorded)
 
     def _send(self, name: str | None, envelope: dict, mailable: Mailable) -> None:
+        recipients_by_kind = {k: [a for _, a in v] for k, v in envelope.items()}
         if self._faking:
             name, _ = self._mailer_config(name)
+            mailable._recipients = recipients_by_kind
             record = copy.copy(mailable)  # un même objet envoyé deux fois garde ses envois
-            record._recipients = {k: [a for _, a in v] for k, v in envelope.items()}
             record._mailer = name
             self._recorded.append(record)
             return
         transport = self.transport(name)
         message = self._build(mailable, envelope)
-        mailable._recipients = {k: [a for _, a in v] for k, v in envelope.items()}
+        mailable._recipients = recipients_by_kind
         recipients = [a for kind in ("to", "cc", "bcc") for _, a in envelope[kind]]
         transport.send(message, recipients)
 
@@ -266,14 +271,19 @@ class Mailer:
         if not mailable.view and not mailable.text:
             raise ValueError(f"{cls} : définissez `view` (HTML) et/ou `text`.")
         subject = _check_line(str(mailable.subject or ""), "le sujet")
-        sender = _address(
-            (
-                self._config("from.address", "hello@example.com"),
-                self._config(
-                    "from.name", self._app.make("config").get("app.name") or "Flask-Artisan"
-                ),
+        try:
+            sender = _address(
+                (
+                    self._config("from.address", "hello@example.com"),
+                    self._config(
+                        "from.name", self._app.make("config").get("app.name") or "Flask-Artisan"
+                    ),
+                )
             )
-        )
+        except ValueError as exc:
+            raise ValueError(
+                f"Expéditeur invalide (mail.from.address, MAIL_FROM_ADDRESS) : {exc}"
+            ) from exc
         message = EmailMessage()
         message["Subject"] = subject
         message["From"] = formataddr(sender)
@@ -285,7 +295,7 @@ class Mailer:
         message["Date"] = formatdate(localtime=True)
         message["Message-ID"] = make_msgid(domain=sender[1].rsplit("@", 1)[1])
 
-        context = mailable.context()
+        context = {"subject": subject, **mailable.context()}
         text = self._render(mailable.text, context) if mailable.text else None
         html = self._render(mailable.view, context) if mailable.view else None
         if text is not None:

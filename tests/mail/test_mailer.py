@@ -125,3 +125,25 @@ def test_flush(mail_app):
     Mail.to("a@x.org").send(Hello("A"))
     transport.flush()
     assert transport.messages == [] and transport.recipients == []
+
+
+def test_invalid_sender_names_config_key(mail_app):
+    mail_app.make("config").set("mail.from.address", "")
+    with pytest.raises(ValueError, match="mail.from.address"):
+        Mail.to("a@x.org").send(Hello("A"))
+
+
+def test_subject_available_in_template(mail_app):
+    (mail_app.base_path("resources/views/emails/subject.txt")).write_text("[{{ subject }}]")
+
+    class WithSubject(TextOnly):
+        text = "emails/subject.txt"
+
+    Mail.to("a@x.org").send(WithSubject("A"))
+    assert Mail.transport("array").messages[0].get_content().strip() == "[Hi]"
+
+
+def test_original_mailable_gets_recipients(mail_app):
+    m = Hello("A")
+    Mail.to("a@x.org").send(m)
+    assert m.has_to("a@x.org")

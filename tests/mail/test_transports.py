@@ -134,3 +134,9 @@ def test_smtp_unknown_option_raises(smtp):
     smtp(host="h", port=587, encrytion="tls")
     with pytest.raises(TypeError, match="encrytion"):
         Mail.to("a@x.org").send(Hello("A"))
+
+
+def test_smtp_empty_port_names_setting(smtp):
+    smtp(host="h", port="")
+    with pytest.raises(ValueError, match="MAIL_PORT"):
+        Mail.to("a@x.org").send(Hello("A"))

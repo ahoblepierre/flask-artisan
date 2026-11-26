@@ -451,7 +451,7 @@ MAIL_HOST=smtp.mailtrap.io
 MAIL_PORT=587
 MAIL_USERNAME=votre-identifiant
 MAIL_PASSWORD=votre-mot-de-passe
-MAIL_ENCRYPTION=tls          # tls pour le port 587 (STARTTLS), ssl pour le port 465, vide sinon
+MAIL_ENCRYPTION=tls          # tls pour le port 587 (STARTTLS), ssl pour le port 465, vide sinon (certificat vérifié)
 MAIL_FROM_ADDRESS=hello@monsite.fr
 MAIL_FROM_NAME="Mon site"
 ```
@@ -497,7 +497,7 @@ class OrderShipped(Mailable):
 
 - **Templates.** Ce sont des templates Jinja, ceux de Flask. Ils sont cherchés dans `resources/views/`, puis dans `templates/` (le dossier habituel de Flask, qui continue de fonctionner). Les variables sont échappées dans un `.html`, pas dans un `.txt`.
 - **HTML, texte ou les deux.** Avec `view` et `text`, le mail contient les deux versions et la messagerie choisit. Il en faut au moins une.
-- **Variables du template.** Les attributs publics du mailable (`self.order`) sont disponibles dans le template. Les attributs qui commencent par `_` ne le sont pas. Pour choisir soi-même, surchargez `context()` :
+- **Variables du template.** Les attributs publics du mailable (`self.order`) sont disponibles dans le template, ainsi que `subject`. Les attributs qui commencent par `_` ne le sont pas. Pour choisir soi-même, surchargez `context()` :
 
   ```python
   def context(self):
@@ -549,12 +549,24 @@ class SendShipmentNotification:
         Mail.to(event.order.user).send(OrderShippedMail(event.order))
 ```
 
-L'envoi marche aussi hors d'une requête (commande `flask`, script) : les templates sont rendus avec l'application.
+L'envoi marche aussi hors d'une requête (commande `flask`, script) : les templates sont rendus avec l'application. Pour qu'un `url_for(...)` y construise un lien absolu, Flask doit connaître l'adresse du site : déclarez-la dans `config/flask.py`, sinon `url_for` lève une erreur hors requête.
+
+```python
+# config/flask.py
+config = {
+    "SERVER_NAME": "monsite.fr",
+    "PREFERRED_URL_SCHEME": "https",
+}
+```
+
+Dans un template de mail, utilisez `url_for("nom.de.route", _external=True)` pour un lien complet.
 
 **Erreurs.** `send` lève une erreur plutôt que de perdre un mail en silence :
 
 - une erreur du serveur SMTP (connexion, authentification, destinataire refusé) remonte telle quelle (exceptions de `smtplib`) ;
-- un destinataire d'une forme inconnue lève `TypeError` ; une adresse sans `@`, aucun destinataire, ou un mailable sans `view` ni `text` lève `ValueError` ;
+- un destinataire d'une forme inconnue lève `TypeError` ; une adresse invalide (sans `@`, ou plusieurs adresses dans une seule chaîne), aucun destinataire, ou un mailable sans `view` ni `text` lève `ValueError` ;
+- un expéditeur (`MAIL_FROM_ADDRESS`) ou un port (`MAIL_PORT`) invalide lève `ValueError` qui nomme le réglage ;
+- une option inconnue dans un mailer `smtp` de `config/mail.py` lève `TypeError` : une faute de frappe ne fait pas partir le mail en clair ;
 - un saut de ligne dans le sujet, un nom ou une adresse lève `ValueError` : il servirait à injecter des en-têtes.
 
 L'envoi est synchrone : la requête attend la réponse du serveur SMTP. L'envoi en file d'attente viendra avec les queues.
@@ -567,6 +579,7 @@ L'envoi est synchrone : la requête attend la réponse du serveur SMTP. L'envoi 
 from wsgi import app
 
 from flask_artisan import Mail
+from app.mail.invoice_paid import InvoicePaid
 from app.mail.order_shipped import OrderShipped
 
 
@@ -592,6 +605,7 @@ def test_shipping_mails_the_customer():
 - Une sous-classe compte pour sa parente : `assert_sent(Mailable)` vérifie qu'un mail quelconque est parti.
 - Un destinataire invalide lève toujours son erreur, même sous fake.
 - Le fake est un mode du mailer de l'application : un service qui a reçu le mailer avant l'appel à `fake()` passe aussi par le fake. Rappeler `Mail.fake()` repart de zéro.
+- L'objet envoyé connaît ensuite ses destinataires (`mail.has_to(...)`), avec ou sans fake.
 - **Restaurer.** Les tests du projet généré partagent une seule application : utilisez `with Mail.fake() as fake:`, ou appelez `fake.restore()` en fin de test.
 
 **Vérifier le rendu.** Le fake ne rend pas les templates. Pour tester le contenu réel du mail, envoyez-le par le transport `array` :
