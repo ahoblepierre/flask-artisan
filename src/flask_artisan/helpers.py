@@ -18,6 +18,11 @@ def base_path(path: str = "") -> Path:
     return Application.get_instance().base_path(path)
 
 
+def dispatch(job):
+    """Met un job en file : raccourci de Queue.push(job)."""
+    return Application.get_instance().make("queue").push(job)
+
+
 def event(obj) -> list:
     """Émet un événement : raccourci de Event.dispatch(obj)."""
     return Application.get_instance().make("events").dispatch(obj)

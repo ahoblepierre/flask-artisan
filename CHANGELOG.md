@@ -2,6 +2,18 @@
 
 Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## Non publié
+
+### Ajouté
+
+- **Queues** sur RQ (extra `flask-artisan[rq]`) : `Job` (`handle` avec injection, `failed`, `queue`, `tries`, `backoff`, `timeout`), `dispatch`, `on_queue`, `delay`, `dispatch_sync`, façade `Queue`, pilotes `sync` et `rq`, sérialisation JSON (modèles par identifiant, rechargés à l'exécution), `flask queue:work`, `queue:failed`, `queue:retry`, `queue:forget`, `queue:flush`, `Queue.fake()`, `flask make:job`.
+- Mail : `Mail.to(...).queue(...)` et `later(...)`, `assert_queued` / `assert_not_queued` / `assert_nothing_queued` dans `Mail.fake()`.
+- Événements : écouteurs `ShouldQueue` exécutés par la file.
+
+### Modifié
+
+- Squelette : `config/queue.py`, `QUEUE_CONNECTION` dans `.env.example`, dossier `app/jobs/`.
+
 ## [0.4.0] - 2026-11-26
 
 ### Ajouté

@@ -421,6 +421,8 @@ flask make:listener Billing/MarkPaid --event Billing/InvoicePaid    # sous-dossi
 
 Avec `--event`, le fichier de l'événement doit déjà exister : sinon rien n'est écrit et la commande indique le chemin attendu. Après création, `make:listener` affiche les imports et l'entrée à ajouter dans `listen`.
 
+Un écouteur qui hérite de `ShouldQueue` est exécuté en arrière-plan par la file d'attente : voir « Queues ».
+
 ## Mail
 
 Chaque mail de l'application est une classe, un *mailable*, qui décrit son sujet, ses templates et ses pièces jointes. On l'envoie en une ligne, depuis un controller, un écouteur d'événement ou une commande :
@@ -569,7 +571,7 @@ Dans un template de mail, utilisez `url_for("nom.de.route", _external=True)` pou
 - une option inconnue dans un mailer `smtp` de `config/mail.py` lève `TypeError` : une faute de frappe ne fait pas partir le mail en clair ;
 - un saut de ligne dans le sujet, un nom ou une adresse lève `ValueError` : il servirait à injecter des en-têtes.
 
-L'envoi est synchrone : la requête attend la réponse du serveur SMTP. L'envoi en file d'attente viendra avec les queues.
+`send` est synchrone : la requête attend la réponse du serveur SMTP. Pour ne pas la faire attendre, mettez le mail en file : `Mail.to(user).queue(Welcome(user))` (voir « Queues »).
 
 ### Tester avec `Mail.fake()`
 
@@ -606,6 +608,7 @@ def test_shipping_mails_the_customer():
 - Un destinataire invalide lève toujours son erreur, même sous fake.
 - Le fake est un mode du mailer de l'application : un service qui a reçu le mailer avant l'appel à `fake()` passe aussi par le fake. Rappeler `Mail.fake()` repart de zéro.
 - L'objet envoyé connaît ensuite ses destinataires (`mail.has_to(...)`), avec ou sans fake.
+- **Mails en file.** `Mail.to(...).queue(...)` et `later(...)` sont enregistrés à part : `assert_queued(Classe, callback=None)`, `assert_not_queued(Classe, callback=None)`, `assert_nothing_queued()` et `queued(Classe)`. `assert_sent` ne compte pas les mails mis en file.
 - **Restaurer.** Les tests du projet généré partagent une seule application : utilisez `with Mail.fake() as fake:`, ou appelez `fake.restore()` en fin de test.
 
 **Vérifier le rendu.** Le fake ne rend pas les templates. Pour tester le contenu réel du mail, envoyez-le par le transport `array` :
@@ -628,6 +631,181 @@ flask make:mail Billing/Invoice     # app/mail/billing/invoice.py + resources/vi
 
 Si l'un des deux fichiers existe, rien n'est écrit (sauf avec `--force`, qui écrase les deux). La commande affiche ensuite l'import et l'appel `Mail.to(...).send(...)`.
 
+## Queues
+
+Certaines tâches n'ont rien à faire dans une requête HTTP : envoyer un mail, traiter une vidéo, appeler une API lente. Une **file d'attente** les met de côté ; un processus à part, le **worker**, les exécute en arrière-plan et les réessaie en cas d'échec. La requête répond tout de suite.
+
+Flask-Artisan ne réinvente pas le moteur : il pose l'API de Laravel sur [RQ](https://python-rq.org) (Redis), qui gère le stockage, le worker, les nouvelles tentatives, la coupure des jobs trop longs, les jobs différés et le registre des échecs.
+
+### Installer
+
+Le pilote `sync` (défaut) exécute les jobs tout de suite, sans rien installer : pratique en développement et dans les tests. Pour une vraie file, il faut RQ et un serveur Redis :
+
+```bash
+pip install "flask-artisan[rq]"
+docker run -d -p 6379:6379 redis:7     # un Redis local pour le développement
+```
+
+```ini
+# .env
+QUEUE_CONNECTION=redis
+REDIS_URL=redis://127.0.0.1:6379/0
+```
+
+Les connexions sont déclarées dans `config/queue.py` (`sync` et `redis` dans le squelette) ; la configuration est relue à chaque envoi. Un projet sans ce fichier utilise `sync`.
+
+**Sécurité.** Le worker exécute ce qu'il lit dans Redis : quiconque peut écrire dans votre Redis peut lui faire exécuter du code (c'est vrai de RQ, Celery ou Laravel). Traitez Redis comme une base de données : mot de passe, réseau privé, connexion chiffrée (`rediss://`) s'il passe par Internet. Flask-Artisan stocke les jobs en JSON (jamais en `pickle`) et n'exécute que des classes de job, mais ce sont des garde-fous, pas une barrière.
+
+### Écrire un job
+
+```bash
+flask make:job ProcessPodcast        # app/jobs/process_podcast.py
+```
+
+```python
+# app/jobs/process_podcast.py
+from flask_artisan.queue import Job
+
+from app.models.podcast import Podcast
+from app.services.transcoder import Transcoder
+
+
+class ProcessPodcast(Job):
+    queue = "audio"          # file (défaut : celle de la connexion, "default")
+    tries = 3                # nombre total d'essais (défaut : 1)
+    backoff = [10, 60]       # secondes avant le 2e, puis le 3e essai (défaut : 0)
+    timeout = 120            # secondes avant que le worker coupe le job (défaut : 60)
+
+    def __init__(self, podcast: Podcast):
+        self.podcast = podcast
+
+    def handle(self, transcoder: Transcoder):     # dépendances injectées par le conteneur
+        transcoder.run(self.podcast)
+
+    def failed(self, exc: Exception):             # facultatif : après le dernier essai raté
+        self.podcast.update(status="failed")
+```
+
+- `backoff` peut être un nombre (le même délai à chaque fois) ou une liste ; si la liste est plus courte que le nombre d'essais, sa dernière valeur est répétée.
+- `failed(exc)` est appelé **une fois**, quand il ne reste plus d'essai. Une erreur levée dans `failed` est journalisée sans masquer celle du job.
+
+**Ce qui voyage dans la file.** Les attributs publics du job (ceux qui ne commencent pas par `_`) sont enregistrés en JSON. Sont acceptés : les valeurs JSON (`str`, nombres, `bool`, `None`, listes, dicts à clés `str`), les `datetime`, `date`, `Decimal`, et les **modèles**, qui voyagent par leur identifiant et sont **rechargés depuis la base** au moment de l'exécution : le job travaille sur des données à jour. Tout le reste (un fichier ouvert, un client HTTP…) lève `TypeError` dès l'envoi, en nommant l'attribut. Un modèle doit être enregistré (avoir un `id`) ; s'il a été supprimé avant l'exécution, le job échoue avec `ModelNotFound`.
+
+Le job est reconstruit **sans appeler `__init__`** : ne mettez dans `__init__` que des affectations. Les classes de jobs doivent être définies au niveau d'un module (pas dans une fonction).
+
+### Envoyer un job
+
+```python
+from flask_artisan import Queue, dispatch
+
+ProcessPodcast.dispatch(podcast)                          # crée le job et le met en file
+dispatch(ProcessPodcast(podcast).on_queue("urgent"))      # sur une autre file
+dispatch(ProcessPodcast(podcast).delay(60))               # dans 60 secondes (ou un timedelta)
+Queue.connection("redis").push(ProcessPodcast(podcast))   # sur une connexion précise
+ProcessPodcast.dispatch_sync(podcast)                     # tout de suite, quel que soit le pilote
+```
+
+`dispatch` renvoie l'identifiant du job RQ (ou `None` avec `sync`). Avec `sync`, le job s'exécute immédiatement, après un aller-retour par la sérialisation (les erreurs de sérialisation apparaissent donc dès le développement) ; son exception remonte à l'appelant après l'appel de `failed`, et `tries`, `backoff` et `delay` sont ignorés.
+
+**Transactions.** Un job envoyé pendant une transaction peut être exécuté avant le `commit` : le worker ne trouverait pas encore le modèle. Envoyez-le après la transaction.
+
+### Lancer le worker
+
+```bash
+flask queue:work                      # connexion par défaut, file de la connexion
+flask queue:work redis --queue urgent,default   # plusieurs files, par ordre de priorité
+flask queue:work --burst              # s'arrête quand les files sont vides
+```
+
+**Le worker n'écoute que les files qu'on lui donne** : sans `--queue`, seulement celle de la connexion (`default`). Un job, un mail ou un écouteur envoyé sur une autre file (`queue = "audio"`) attend tant qu'aucun worker n'écoute cette file : listez-les toutes, par ordre de priorité (`--queue audio,listeners,mails,default`), ou lancez un worker par file.
+
+Le worker exécute les jobs **dans le processus de l'application** (comme `php artisan queue:work`), chacun avec sa propre session de base de données. Il gère aussi les jobs différés et les essais espacés.
+
+**En production**, faites-le tourner sous un superviseur qui le relance s'il s'arrête, et **redémarrez-le après chaque déploiement** : il charge le code une seule fois. Avec systemd :
+
+```ini
+# /etc/systemd/system/monsite-worker.service
+[Service]
+WorkingDirectory=/srv/monsite
+ExecStart=/srv/monsite/.venv/bin/flask queue:work --queue audio,listeners,mails,default
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Le worker RQ ne tourne pas sous Windows natif : utilisez WSL ou Docker.
+
+### Jobs en échec
+
+Un job qui a épuisé ses essais va dans le registre des échecs de RQ :
+
+```bash
+flask queue:failed                # id, classe, file, date, dernière ligne de l'erreur
+flask queue:retry <id> [<id>…]    # le remet en file, avec tous ses essais
+flask queue:retry all
+flask queue:forget <id>           # le supprime
+flask queue:flush                 # les supprime tous
+```
+
+Ces commandes couvrent toutes les files de la connexion et acceptent `--connection <nom>`. Les outils de RQ (`rq info`, [rq-dashboard](https://github.com/Parallels/rq-dashboard)) marchent aussi, à condition de leur indiquer le sérialiseur JSON : `--serializer rq.serializers.JSONSerializer`.
+
+### Mails et écouteurs en file d'attente
+
+```python
+Mail.to(user).queue(Welcome(user))         # le worker enverra le mail
+Mail.to(user).later(600, Reminder(user))   # dans 10 minutes
+```
+
+Les destinataires sont vérifiés tout de suite ; le mailable voyage comme un job (ses modèles par identifiant). Un attribut `queue = "mails"` sur la classe du mailable choisit la file.
+
+Un écouteur d'événement qui hérite de `ShouldQueue` n'est pas appelé pendant `Event.dispatch` : il est mis en file, et le worker l'exécute avec l'événement reconstruit.
+
+```python
+from flask_artisan.queue import ShouldQueue
+
+
+class SendShipmentNotification(ShouldQueue):
+    queue = "listeners"      # facultatif, comme tries, backoff, timeout
+    tries = 3
+
+    def handle(self, event: OrderShipped):
+        Mail.to(event.order.user).send(OrderShippedMail(event.order))
+```
+
+Il se déclare comme les autres écouteurs (dans `listen`, en classe ou en tuple `(Classe, "méthode")`). L'événement doit être une classe de l'application et être sérialisable (mêmes règles qu'un job) ; `Event.dispatch` renvoie `None` pour cet écouteur, qui ne peut pas arrêter la propagation.
+
+### Tester
+
+`Queue.fake()` enregistre les jobs poussés **sans les exécuter** (ils sont tout de même sérialisés : une erreur de sérialisation reste levée). Utilisé comme bloc `with`, il se restaure à la sortie :
+
+```python
+from wsgi import app
+
+from flask_artisan import Queue
+from app.jobs.process_podcast import ProcessPodcast
+
+
+def test_upload_queues_processing():
+    with Queue.fake() as fake:
+        app.test_client().post("/api/podcasts", json={"title": "Épisode 1"})
+
+    fake.assert_pushed(ProcessPodcast)
+    fake.assert_pushed(ProcessPodcast, lambda job: job.podcast.title == "Épisode 1")
+    fake.assert_pushed_on("audio", ProcessPodcast)
+```
+
+| Méthode | Vérifie que… |
+|---|---|
+| `assert_pushed(Classe, callback=None)` | le job a été poussé au moins une fois (et que `callback(job)` est vrai pour l'un d'eux) |
+| `assert_pushed_times(Classe, n)` | le job a été poussé exactement `n` fois |
+| `assert_not_pushed(Classe, callback=None)` | le job n'a pas été poussé (ou aucun ne satisfait `callback`) |
+| `assert_nothing_pushed()` | aucun job n'a été poussé |
+| `assert_pushed_on(file, Classe)` | le job a été poussé sur cette file |
+| `pushed(Classe)` | (pas une assertion) la liste des jobs poussés |
+
+Le callback reçoit l'instance passée à `dispatch` ; `job.queue_name` et `job.delay_seconds` y donnent la file et le délai demandés. `dispatch_sync` n'est pas intercepté. Pour tester ce que fait un job, appelez simplement `ProcessPodcast.dispatch_sync(...)` ou laissez le pilote `sync`.
+
 ## Console
 
 Les générateurs écrivent le fichier au bon endroit, avec un squelette prêt à l'emploi :
@@ -640,6 +818,7 @@ flask make:model Post                            # app/models/post.py
 flask make:event OrderShipped                    # app/events/order_shipped.py
 flask make:listener SendShipmentNotification --event OrderShipped  # app/listeners/…
 flask make:mail OrderShipped                     # app/mail/order_shipped.py + son template
+flask make:job ProcessPodcast                    # app/jobs/process_podcast.py
 flask make:request StorePostRequest              # app/http/requests/store_post_request.py
 flask make:middleware EnsureJson                 # app/http/middleware/ensure_json.py
 flask make:provider PaymentServiceProvider       # app/providers/payment_service_provider.py
@@ -734,6 +913,7 @@ Après la v0.1 :
 - ✅ Validation (`FormRequest`, règles façon Laravel, réponses 422 JSON)
 - ✅ Événements (`Event.dispatch`, écouteurs, `Event.fake()`)
 - ✅ Mail (mailables, transports `smtp` / `log` / `array`, `Mail.fake()`)
+- ✅ Queues (jobs sur RQ, `flask queue:work`, échecs, `Mail.queue`, écouteurs `ShouldQueue`, `Queue.fake()`)
 
 ## Contribuer
 

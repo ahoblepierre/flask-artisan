@@ -195,10 +195,23 @@ class PendingMail:
     def bcc(self, *recipients) -> "PendingMail":
         return self._add("bcc", recipients)
 
-    def send(self, mailable: Mailable) -> None:
+    def _check(self, mailable: Mailable) -> None:
         if not self._envelope["to"]:
             raise ValueError(f"{type(mailable).__name__} : aucun destinataire (Mail.to(...)).")
+
+    def send(self, mailable: Mailable) -> None:
+        self._check(mailable)
         self._mailer._send(self._name, self._envelope, mailable)
+
+    def queue(self, mailable: Mailable):
+        """Envoie le mail par la file d'attente (worker), ou tout de suite avec `sync`."""
+        self._check(mailable)
+        return self._mailer._queue(self._name, self._envelope, mailable, 0)
+
+    def later(self, delay, mailable: Mailable):
+        """Comme `queue`, après `delay` secondes (ou un timedelta)."""
+        self._check(mailable)
+        return self._mailer._queue(self._name, self._envelope, mailable, delay)
 
 
 class Mailer:
@@ -210,6 +223,7 @@ class Mailer:
         # Mode fake : un état du mailer, pour que les services qui le tiennent déjà le voient.
         self._faking = False
         self._recorded: list = []
+        self._queued: list = []
 
     def _config(self, key: str, default=None):
         return self._app.make("config").get(f"mail.{key}", default)
@@ -243,7 +257,27 @@ class Mailer:
         """Enregistre les mails envoyés, sans les rendre ni les envoyer."""
         self._faking = True
         self._recorded = []
-        return MailFake(self, self._recorded)
+        self._queued = []
+        return MailFake(self, self._recorded, self._queued)
+
+    def _queue(self, name: str | None, envelope: dict, mailable: Mailable, delay):
+        from flask_artisan.queue.jobs import SendQueuedMailable
+
+        if self._faking:
+            self._mailer_config(name)
+            from flask_artisan.queue.serialization import serialize
+
+            serialize(SendQueuedMailable.wrap(mailable, envelope, name))  # erreurs vues en test
+            record = copy.copy(mailable)
+            record._recipients = {k: [a for _, a in v] for k, v in envelope.items()}
+            record._mailer = name
+            self._queued.append(record)
+            return None
+        job = SendQueuedMailable.wrap(mailable, envelope, name)
+        job.on_queue(getattr(mailable, "queue", None))
+        if delay:
+            job.delay(delay)
+        return self._app.make("queue").push(job)
 
     def _send(self, name: str | None, envelope: dict, mailable: Mailable) -> None:
         recipients_by_kind = {k: [a for _, a in v] for k, v in envelope.items()}
@@ -315,9 +349,10 @@ class Mailer:
 class MailFake:
     """Assertions sur les mails envoyés depuis `Mail.fake()`."""
 
-    def __init__(self, mailer: Mailer, recorded: list):
+    def __init__(self, mailer: Mailer, recorded: list, queued: list):
         self._mailer = mailer
         self._recorded = recorded
+        self._queued_mails = queued
 
     def restore(self) -> None:
         """Rend au mailer son fonctionnement normal ; les enregistrements restent lisibles."""
@@ -363,3 +398,32 @@ class MailFake:
         if counts:
             sent = ", ".join(f"{name} envoyé {n} fois" for name, n in counts.items())
             raise AssertionError(f"Aucun mail attendu, mais : {sent}.")
+
+    # --- mails mis en file (Mail.to(...).queue / later) ---
+
+    def queued(self, mailable_class: type) -> list:
+        return [m for m in self._queued_mails if isinstance(m, mailable_class)]
+
+    def _queued_matching(self, mailable_class: type, callback) -> list:
+        mails = self.queued(mailable_class)
+        return mails if callback is None else [m for m in mails if callback(m)]
+
+    def assert_queued(self, mailable_class: type, callback=None) -> None:
+        if not self._queued_matching(mailable_class, callback):
+            detail = " correspondant au callback" if callback else ""
+            raise AssertionError(
+                f"Mail {mailable_class.__name__}{detail} mis en file 0 fois, attendu au moins 1."
+            )
+
+    def assert_not_queued(self, mailable_class: type, callback=None) -> None:
+        count = len(self._queued_matching(mailable_class, callback))
+        if count:
+            raise AssertionError(
+                f"Mail {mailable_class.__name__} mis en file {count} fois, attendu aucun."
+            )
+
+    def assert_nothing_queued(self) -> None:
+        counts = Counter(type(m).__name__ for m in self._queued_mails)
+        if counts:
+            queued = ", ".join(f"{name} mis en file {n} fois" for name, n in counts.items())
+            raise AssertionError(f"Aucun mail en file attendu, mais : {queued}.")

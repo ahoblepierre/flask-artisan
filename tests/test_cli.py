@@ -43,6 +43,8 @@ def test_new_creates_project(project):
         "config/mail.py",
         "app/mail/__init__.py",
         "resources/views/emails/.gitkeep",
+        "config/queue.py",
+        "app/jobs/__init__.py",
     ]:
         assert (project / path).exists(), path
 
@@ -254,3 +256,27 @@ def test_generated_project_mail_flow(project):
     )
     out = run(project, "-c", code)
     assert "Bienvenue A" in out.stdout, out.stdout + out.stderr
+
+
+def test_generated_env_has_queue_settings(project):
+    assert "QUEUE_CONNECTION=sync" in (project / ".env").read_text().splitlines()
+
+
+def test_generated_project_queue_flow(project):
+    result = run(project, "-m", "flask", "make:job", "Hello")
+    assert result.returncode == 0, result.stdout + result.stderr
+    job = project / "app/jobs/hello.py"
+    source = job.read_text()
+    assert "def handle(self):" in source
+    job.write_text(
+        source.replace("def handle(self):", 'def handle(self):\n        print("RAN")', 1)
+    )
+    code = (
+        "from wsgi import app\nfrom flask_artisan import Queue\nfrom app.jobs.hello import Hello\n"
+        "with app.app_context():\n"
+        "    Hello.dispatch()\n"
+        "    with Queue.fake() as fake:\n        Hello.dispatch()\n"
+        "    fake.assert_pushed(Hello)\n    print('FAKED')\n"
+    )
+    out = run(project, "-c", code)
+    assert out.stdout.split() == ["RAN", "FAKED"], out.stdout + out.stderr

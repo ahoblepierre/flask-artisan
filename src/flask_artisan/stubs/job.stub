@@ -1,0 +1,15 @@
+from flask_artisan.queue import Job
+
+
+class $class_name(Job):
+    # queue = "default"   # file (défaut : celle de la connexion)
+    # tries = 3           # nombre d'essais
+    # backoff = [10, 60]  # secondes avant chaque nouvel essai
+    # timeout = 60        # secondes avant que le worker coupe le job
+
+    # Les attributs publics sont sérialisés (un modèle voyage par son identifiant) :
+    # def __init__(self, podcast):
+    #     self.podcast = podcast
+
+    def handle(self):
+        pass

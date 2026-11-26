@@ -328,3 +328,23 @@ def test_make_mail_force_overwrites_both(artisan):
     tpl.write_text("x")
     assert run("make:mail", "OrderShipped", "--force").exit_code == 0
     assert py.read_text() != "x" and tpl.read_text() != "x"
+
+
+def test_make_job(artisan):
+    from flask_artisan.queue import Job
+
+    app, run = artisan
+    result = run("make:job", "ProcessPodcast")
+    assert result.exit_code == 0, result.output
+    path = app.base_path("app/jobs/process_podcast.py")
+    cls = load(path).ProcessPodcast
+    assert issubclass(cls, Job) and callable(cls.handle)
+    assert "ProcessPodcast.dispatch(" in result.output
+    assert "from app.jobs.process_podcast import ProcessPodcast" in result.output
+    assert_ruff_clean(path)
+
+
+def test_make_job_subfolder(artisan):
+    app, run = artisan
+    assert run("make:job", "Media/Transcode").exit_code == 0
+    assert app.base_path("app/jobs/media/transcode.py").is_file()
