@@ -197,5 +197,8 @@ def test_generated_project_broken_command_is_reported(project):
 
 
 def test_generated_requirements_pin_pypi_release(project):
+    import flask_artisan
+
+    major, minor = map(int, flask_artisan.__version__.split(".")[:2])
     requirements = (project / "requirements.txt").read_text().splitlines()
-    assert "flask-artisan>=0.1,<0.2" in requirements
+    assert f"flask-artisan>={major}.{minor},<{major}.{minor + 1}" in requirements
