@@ -2,6 +2,17 @@
 
 Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## Non publié
+
+### Ajouté
+
+- **Mail** : `Mailable` (sujet, templates HTML et texte, contexte, pièces jointes `Attachment`, `reply_to`), `Mail.to(...).cc(...).bcc(...).send(...)` et `Mail.mailer(...)`, transports `smtp` (STARTTLS / SSL), `log` et `array`, `Mail.fake()` et ses assertions, `flask make:mail`.
+- Templates Jinja cherchés dans `resources/views/`, puis dans `templates/` (défaut de Flask, toujours pris en charge).
+
+### Modifié
+
+- Squelette : `config/mail.py`, bloc `MAIL_*` dans `.env.example`, dossiers `app/mail/` et `resources/views/emails/`.
+
 ## [0.3.0] - 2026-11-26
 
 ### Ajouté

@@ -130,6 +130,31 @@ def make_listener(name, event_name, force):
     click.echo("\n".join([f"  {_import_line(path, cls)}", *lines]))
 
 
+@click.command("make:mail")
+@click.argument("name")
+@force_option
+@with_appcontext
+def make_mail(name, force):
+    """Crée un mail (Mailable) dans app/mail et son template dans resources/views/emails."""
+    dirs, cls = split_name(name, allow_dirs=True)
+    view = "/".join(["emails", *dirs, class_to_file(cls)])
+    template = current_app.base_path(f"resources/views/{view}.html")
+    relative = f"resources/views/{view}.html"
+    # Vérifié avant d'écrire la classe : aucun des deux fichiers n'est écrit en cas de refus.
+    if template.exists() and not force:
+        raise click.ClickException(f"Le fichier {relative} existe déjà (--force pour l'écraser).")
+    path = write_stub(
+        "app/mail", name, "mail", force=force, view=f"{view}.html", text_view=f"{view}.txt"
+    )
+    template.parent.mkdir(parents=True, exist_ok=True)
+    template.write_text((STUBS / "mail.view.stub").read_text())
+    click.echo(f"Créé : {relative}")
+    click.echo(
+        f"Envoyez-le :\n  {_import_line(path, cls)}\n  from flask_artisan import Mail\n"
+        f"  Mail.to(user).send({cls}(...))"
+    )
+
+
 @click.command("make:model")
 @click.argument("name")
 @force_option
@@ -227,6 +252,7 @@ COMMANDS = [
     make_request,
     make_event,
     make_listener,
+    make_mail,
     route_list,
 ]
 

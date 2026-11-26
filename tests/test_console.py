@@ -273,3 +273,58 @@ def test_make_listener_with_event_prints_listen_line(artisan):
     assert "from app.listeners.mark_paid import MarkPaid" in result.output
     assert "from app.events.invoice_paid import InvoicePaid" in result.output
     assert "InvoicePaid: [MarkPaid]" in result.output
+
+
+def test_make_mail_creates_class_and_template(artisan):
+    from flask_artisan.mail import Mailable
+
+    app, run = artisan
+    result = run("make:mail", "OrderShipped")
+    assert result.exit_code == 0, result.output
+    path = app.base_path("app/mail/order_shipped.py")
+    cls = load(path).OrderShipped
+    assert issubclass(cls, Mailable) and cls.view == "emails/order_shipped.html"
+    assert app.base_path("resources/views/emails/order_shipped.html").is_file()
+    assert "from app.mail.order_shipped import OrderShipped" in result.output
+    assert "Mail.to(" in result.output
+    assert_ruff_clean(path)
+
+
+def test_make_mail_subfolder(artisan):
+    app, run = artisan
+    assert run("make:mail", "Admin/Invoice").exit_code == 0
+    cls = load(app.base_path("app/mail/admin/invoice.py")).Invoice
+    assert cls.view == "emails/admin/invoice.html"
+    assert app.base_path("resources/views/emails/admin/invoice.html").is_file()
+
+
+def test_make_mail_existing_template_writes_nothing(artisan):
+    app, run = artisan
+    tpl = app.base_path("resources/views/emails/order_shipped.html")
+    tpl.parent.mkdir(parents=True)
+    tpl.write_text("mine")
+    result = run("make:mail", "OrderShipped")
+    assert result.exit_code != 0
+    assert "resources/views/emails/order_shipped.html" in result.output
+    assert not app.base_path("app/mail/order_shipped.py").exists()
+    assert tpl.read_text() == "mine"
+
+
+def test_make_mail_existing_class_writes_no_template(artisan):
+    app, run = artisan
+    assert run("make:mail", "OrderShipped").exit_code == 0
+    tpl = app.base_path("resources/views/emails/order_shipped.html")
+    tpl.unlink()
+    assert run("make:mail", "OrderShipped").exit_code != 0
+    assert not tpl.exists()
+
+
+def test_make_mail_force_overwrites_both(artisan):
+    app, run = artisan
+    assert run("make:mail", "OrderShipped").exit_code == 0
+    py = app.base_path("app/mail/order_shipped.py")
+    tpl = app.base_path("resources/views/emails/order_shipped.html")
+    py.write_text("x")
+    tpl.write_text("x")
+    assert run("make:mail", "OrderShipped", "--force").exit_code == 0
+    assert py.read_text() != "x" and tpl.read_text() != "x"

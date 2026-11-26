@@ -40,6 +40,9 @@ def test_new_creates_project(project):
         ".env",
         ".env.example",
         ".gitignore",
+        "config/mail.py",
+        "app/mail/__init__.py",
+        "resources/views/emails/.gitkeep",
     ]:
         assert (project / path).exists(), path
 
@@ -227,3 +230,27 @@ def test_generated_project_events_flow(project):
     )
     out = run(project, "-c", code)
     assert "SHIPPED" in out.stdout, out.stdout + out.stderr
+
+
+def test_generated_env_has_mail_settings(project):
+    assert "MAIL_MAILER=log" in (project / ".env").read_text().splitlines()
+
+
+def test_generated_project_mail_flow(project):
+    result = run(project, "-m", "flask", "make:mail", "Welcome")
+    assert result.returncode == 0, result.stdout + result.stderr
+    (project / "resources/views/emails/welcome.html").write_text("<p>Bienvenue {{ name }}</p>")
+    mail = project / "app/mail/welcome.py"
+    mail.write_text(
+        mail.read_text() + "\n\nWelcome.__init__ = lambda self, name: setattr(self, 'name', name)\n"
+    )
+    code = (
+        "from wsgi import app\nfrom flask_artisan import Mail\nfrom app.mail.welcome import Welcome\n"
+        "with Mail.fake() as fake:\n    Mail.to('a@x.org').send(Welcome('A'))\n"
+        "fake.assert_sent(Welcome, lambda m: m.has_to('a@x.org'))\n"
+        "Mail.to('a@x.org').send(Welcome('A'))\n"
+        "Mail.mailer('array').to('a@x.org').send(Welcome('A'))\n"
+        "print(Mail.transport('array').messages[0].get_body(('html',)).get_content())\n"
+    )
+    out = run(project, "-c", code)
+    assert "Bienvenue A" in out.stdout, out.stdout + out.stderr

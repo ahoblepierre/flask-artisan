@@ -40,3 +40,7 @@ class Auth(Facade):
 
 class Event(Facade):
     accessor = "events"
+
+
+class Mail(Facade):
+    accessor = "mail"

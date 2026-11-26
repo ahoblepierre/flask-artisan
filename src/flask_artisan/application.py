@@ -3,12 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from flask import Flask, current_app, has_app_context
+from jinja2 import ChoiceLoader, FileSystemLoader
 
 from flask_artisan.config import Repository
 from flask_artisan.console import COMMANDS, ArtisanGroup
 from flask_artisan.container import Container
 from flask_artisan.env import load_env_file
 from flask_artisan.events import Dispatcher
+from flask_artisan.mail import Mailer
 from flask_artisan.providers import ServiceProvider
 from flask_artisan.routing import Router
 
@@ -26,6 +28,11 @@ class Application(Flask, Container):
             import_name=base.name,
             root_path=str(base),
             instance_path=str(base / "instance"),
+        )
+        # Vues de Laravel d'abord, puis le dossier de Flask ; affecté à l'instance (pas de
+        # redéfinition de Flask.jinja_loader dans la classe).
+        self.jinja_loader = ChoiceLoader(
+            [FileSystemLoader(base / "resources" / "views"), FileSystemLoader(base / "templates")]
         )
         self._base_path = base
         self._providers: dict[type, ServiceProvider] = {}
@@ -45,6 +52,9 @@ class Application(Flask, Container):
         events = Dispatcher(self)
         self.instance("events", events)
         self.instance(Dispatcher, events)
+        mailer = Mailer(self)
+        self.instance("mail", mailer)
+        self.instance(Mailer, mailer)
         Application.set_instance(self)
 
         self.cli = ArtisanGroup(self.name, app=self)

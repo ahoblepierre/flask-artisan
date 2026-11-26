@@ -1,5 +1,5 @@
 import pytest
-from flask import Flask
+from flask import Flask, render_template
 
 from flask_artisan import Application, Container, Repository, ServiceProvider, config
 
@@ -154,3 +154,30 @@ def test_app_built_inside_other_app_context_boots_against_itself(make_project, t
         b.register(P)
     assert seen == ["B"]
     assert b.test_client().get("/b").status_code == 200
+
+
+def _write(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def test_templates_found_in_resources_views(make_project):
+    base = make_project()
+    _write(base / "resources/views/hello.html", "views {{ name }}")
+    with Application(base).app_context():
+        assert render_template("hello.html", name="A") == "views A"
+
+
+def test_templates_folder_still_works(make_project):
+    base = make_project()
+    _write(base / "templates/old.html", "flask")
+    with Application(base).test_request_context():
+        assert render_template("old.html") == "flask"
+
+
+def test_resources_views_wins_over_templates(make_project):
+    base = make_project()
+    _write(base / "resources/views/same.html", "views")
+    _write(base / "templates/same.html", "flask")
+    with Application(base).app_context():
+        assert render_template("same.html") == "views"
