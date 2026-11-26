@@ -2,7 +2,7 @@
 
 Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
-## Non publié
+## [0.4.0] - 2026-11-26
 
 ### Ajouté
 
@@ -11,6 +11,7 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ### Modifié
 
+- Squelette : le projet généré dépend de `flask-artisan>=0.4,<0.5`.
 - Squelette : `config/mail.py`, bloc `MAIL_*` dans `.env.example`, dossiers `app/mail/` et `resources/views/emails/`.
 
 ## [0.3.0] - 2026-11-26
@@ -47,6 +48,7 @@ Première version publique.
 - **Auth** : façade `Auth` (`attempt`, `validate`, `login`, `logout`, `user`…), guards session et token (tokens d'API en base façon Sanctum), hash automatique du mot de passe, middleware `auth` / `auth:api`, routes `/api/login`, `/api/user`, `/api/logout` dans le squelette.
 - **Console** : `flask make:controller|model|middleware|provider|command`, commandes du projet découvertes dans `app/console/commands/`, `flask route:list`.
 
+[0.4.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.4.0
 [0.3.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.3.0
 [0.2.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.2.0
 [0.1.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.1.0
