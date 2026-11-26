@@ -63,7 +63,11 @@ class Dispatcher:
         self._faking = True
         self._faked = event_classes
         self._recorded = []
-        return EventFake(self)
+        return EventFake(self, self._recorded)
+
+    def _unfake(self) -> None:
+        self._faking = False
+        self._faked = ()
 
     def _normalize(self, event_class: type, listener) -> Callable[[Any], Any]:
         cls, method = None, "handle"
@@ -87,11 +91,23 @@ class Dispatcher:
 class EventFake:
     """Assertions sur les événements émis depuis `Event.fake()`."""
 
-    def __init__(self, dispatcher: Dispatcher):
+    def __init__(self, dispatcher: Dispatcher, recorded: list):
         self._dispatcher = dispatcher
+        self._recorded = recorded
+
+    def restore(self) -> None:
+        """Rend au dispatcher son fonctionnement normal ; les enregistrements restent lisibles."""
+        if self._dispatcher._recorded is self._recorded:  # pas remplacé par un fake() plus récent
+            self._dispatcher._unfake()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.restore()
 
     def dispatched(self, event_class: type) -> list:
-        return [e for e in self._dispatcher._recorded if isinstance(e, event_class)]
+        return [e for e in self._recorded if isinstance(e, event_class)]
 
     def _matching(self, event_class: type, callback) -> list:
         events = self.dispatched(event_class)
@@ -120,7 +136,7 @@ class EventFake:
             )
 
     def assert_nothing_dispatched(self) -> None:
-        counts = Counter(type(e).__name__ for e in self._dispatcher._recorded)
+        counts = Counter(type(e).__name__ for e in self._recorded)
         if counts:
             emitted = ", ".join(f"{name} émis {n} fois" for name, n in counts.items())
             raise AssertionError(f"Aucun événement attendu, mais : {emitted}.")

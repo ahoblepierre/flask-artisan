@@ -124,3 +124,31 @@ def test_listen_and_forget_still_work_in_fake_mode(app):
     Event.forget(Shipped)
     event(Shipped())
     assert log == ["x"]
+
+
+def test_restore_runs_listeners_again_and_keeps_records(app):
+    Event.listen(Shipped, lambda e: log.append("x"))
+    fake = Event.fake()
+    event(Shipped())
+    fake.restore()
+    event(Shipped())
+    assert log == ["x"]
+    fake.assert_dispatched_times(Shipped, 1)
+
+
+def test_fake_as_context_manager_restores_on_exit(app):
+    Event.listen(Shipped, lambda e: log.append("x"))
+    with Event.fake() as fake:
+        event(Shipped())
+        assert log == []
+    event(Shipped())
+    assert log == ["x"]
+    fake.assert_dispatched_times(Shipped, 1)
+
+
+def test_context_manager_restores_even_on_error(app):
+    Event.listen(Shipped, lambda e: log.append("x"))
+    with pytest.raises(RuntimeError), Event.fake():
+        raise RuntimeError
+    event(Shipped())
+    assert log == ["x"]

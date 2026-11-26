@@ -379,15 +379,17 @@ Autres méthodes : `Event.has_listeners(OrderShipped)`, `Event.forget(OrderShipp
 
 ### Tester avec `Event.fake()`
 
-`Event.fake()` enregistre les événements émis **sans exécuter leurs écouteurs**, puis permet de vérifier ce qui a été émis :
+`Event.fake()` enregistre les événements émis **sans exécuter leurs écouteurs**, puis permet de vérifier ce qui a été émis. Utilisé comme bloc `with`, il rend au dispatcher son fonctionnement normal à la sortie :
 
 ```python
+from wsgi import app
+
 from flask_artisan import Event
 
 
-def test_shipping_announces_the_order(app, client):
-    fake = Event.fake()
-    client.post("/api/orders/1/ship")
+def test_shipping_announces_the_order():
+    with Event.fake() as fake:
+        app.test_client().post("/api/orders/1/ship")
 
     fake.assert_dispatched(OrderShipped)
     fake.assert_dispatched(OrderShipped, lambda e: e.order.id == 1)
@@ -406,7 +408,7 @@ def test_shipping_announces_the_order(app, client):
 - `Event.fake(OrderShipped, …)` ne simule que ces événements (et leurs sous-classes) ; les autres exécutent normalement leurs écouteurs. **Tous** restent vérifiables par les assertions.
 - Le fake est un mode du dispatcher de l'application : un service qui a reçu le dispatcher avant l'appel à `fake()` passe aussi par le fake.
 - Rappeler `Event.fake(...)` remplace le précédent et repart de zéro.
-- Le fake vit aussi longtemps que l'application de test : rien à restaurer.
+- **Restaurer.** Les tests du projet généré partagent une seule application (`from wsgi import app`) : un fake laissé actif bloquerait les écouteurs des tests suivants. Utilisez `with Event.fake() as fake:`, ou appelez `fake.restore()` en fin de test. Les assertions restent utilisables après la restauration.
 
 ### Générateurs
 
