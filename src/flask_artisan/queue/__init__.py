@@ -1,6 +1,6 @@
 """Files d'attente façon Laravel sur RQ."""
 
 from flask_artisan.queue.jobs import Job
-from flask_artisan.queue.manager import QueueManager
+from flask_artisan.queue.manager import QueueFake, QueueManager
 
-__all__ = ["Job", "QueueManager"]
+__all__ = ["Job", "QueueFake", "QueueManager"]

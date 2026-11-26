@@ -1,5 +1,7 @@
 """Le gestionnaire de files (`"queue"`, façade `Queue`) et ses pilotes."""
 
+from collections import Counter
+
 from flask_artisan.queue.jobs import Job, execute
 from flask_artisan.queue.serialization import restore, serialize
 
@@ -43,6 +45,15 @@ class QueueManager:
 
     def __init__(self, app):
         self._app = app
+        # Mode fake : un état du gestionnaire, vu aussi par les services qui le tiennent déjà.
+        self._faking = False
+        self._recorded: list = []
+
+    def fake(self) -> "QueueFake":
+        """Enregistre les jobs poussés, sans les exécuter ni les envoyer."""
+        self._faking = True
+        self._recorded = []
+        return QueueFake(self, self._recorded)
 
     def _config(self, key: str, default=None):
         return self._app.make("config").get(f"queue.{key}", default)
@@ -90,4 +101,70 @@ class QueueManager:
     def _push(self, name: str | None, job: Job):
         if not isinstance(job, Job):
             raise TypeError(f"dispatch attend un Job, pas {job!r}.")
-        return self._driver(name).push(job, self._options(job))
+        options = self._options(job)
+        if self._faking:
+            _, connection = self._connection_config(name)
+            serialize(job)  # une erreur de sérialisation doit se voir aussi sous fake
+            queue = options["queue"] or connection.get("queue") or "default"
+            self._recorded.append((job, queue))
+            return None
+        return self._driver(name).push(job, options)
+
+
+class QueueFake:
+    """Assertions sur les jobs poussés depuis `Queue.fake()`."""
+
+    def __init__(self, manager: QueueManager, recorded: list):
+        self._manager = manager
+        self._recorded = recorded
+
+    def restore(self) -> None:
+        """Rend au gestionnaire son fonctionnement normal ; les enregistrements restent lisibles."""
+        if self._manager._recorded is self._recorded:  # pas remplacé par un fake() plus récent
+            self._manager._faking = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.restore()
+
+    def pushed(self, job_class: type) -> list:
+        return [job for job, _ in self._recorded if isinstance(job, job_class)]
+
+    def _matching(self, job_class: type, callback) -> list:
+        jobs = self.pushed(job_class)
+        return jobs if callback is None else [j for j in jobs if callback(j)]
+
+    def assert_pushed(self, job_class: type, callback=None) -> None:
+        if not self._matching(job_class, callback):
+            detail = " correspondant au callback" if callback else ""
+            raise AssertionError(
+                f"Job {job_class.__name__}{detail} poussé 0 fois, attendu au moins 1."
+            )
+
+    def assert_pushed_times(self, job_class: type, times: int) -> None:
+        count = len(self.pushed(job_class))
+        if count != times:
+            raise AssertionError(f"Job {job_class.__name__} poussé {count} fois, attendu {times}.")
+
+    def assert_not_pushed(self, job_class: type, callback=None) -> None:
+        count = len(self._matching(job_class, callback))
+        if count:
+            raise AssertionError(
+                f"Job {job_class.__name__} poussé {count} fois, attendu aucun envoi."
+            )
+
+    def assert_nothing_pushed(self) -> None:
+        counts = Counter(type(job).__name__ for job, _ in self._recorded)
+        if counts:
+            pushed = ", ".join(f"{name} poussé {n} fois" for name, n in counts.items())
+            raise AssertionError(f"Aucun job attendu, mais : {pushed}.")
+
+    def assert_pushed_on(self, queue: str, job_class: type) -> None:
+        queues = [q for job, q in self._recorded if isinstance(job, job_class)]
+        if queue not in queues:
+            seen = ", ".join(sorted(set(queues))) or "aucune"
+            raise AssertionError(
+                f"Job {job_class.__name__} non poussé sur la file {queue!r} (files : {seen})."
+            )
