@@ -102,3 +102,7 @@ class QueuedListener(ShouldQueue):
 class PlainListener:
     def handle(self, event):
         Record.append("plain")
+
+
+class AudioBoom(Boom):
+    queue = "audio"

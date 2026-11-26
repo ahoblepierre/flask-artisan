@@ -95,3 +95,11 @@ def test_worker_sends_queued_mail(mail_app, monkeypatch):
     SimpleWorker([queue], connection=redis, serializer=JSONSerializer).work(burst=True)
     [msg] = Mail.transport("array").messages
     assert msg["To"] == "a@x.org" and "Hello A" in msg.get_body(("plain",)).get_content()
+
+
+def test_mail_fake_still_serializes_queued_mail(mail_app):
+    bad = Hello("A")
+    bad.handle = object()
+    with Mail.fake() as fake, pytest.raises(TypeError, match="handle"):
+        Mail.to("a@x.org").queue(bad)
+    fake.assert_nothing_queued()

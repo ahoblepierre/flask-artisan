@@ -4,6 +4,7 @@ RQ et redis ne sont importés qu'ici, à l'usage : sans l'extra `[rq]`, le reste
 """
 
 from datetime import timedelta
+from functools import cache
 
 INSTALL = 'Le pilote rq demande RQ : pip install "flask-artisan[rq]".'
 
@@ -16,8 +17,9 @@ def require_rq():
     return rq
 
 
+@cache
 def connect(url: str):
-    """Connexion Redis (point de remplacement des tests)."""
+    """Client Redis, un par URL et par processus (son pool de connexions est réutilisé)."""
     require_rq()
     from redis import Redis
 

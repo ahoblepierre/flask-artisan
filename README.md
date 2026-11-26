@@ -717,6 +717,8 @@ flask queue:work redis --queue urgent,default   # plusieurs files, par ordre de 
 flask queue:work --burst              # s'arrête quand les files sont vides
 ```
 
+**Le worker n'écoute que les files qu'on lui donne** : sans `--queue`, seulement celle de la connexion (`default`). Un job, un mail ou un écouteur envoyé sur une autre file (`queue = "audio"`) attend tant qu'aucun worker n'écoute cette file : listez-les toutes, par ordre de priorité (`--queue audio,listeners,mails,default`), ou lancez un worker par file.
+
 Le worker exécute les jobs **dans le processus de l'application** (comme `php artisan queue:work`), chacun avec sa propre session de base de données. Il gère aussi les jobs différés et les essais espacés.
 
 **En production**, faites-le tourner sous un superviseur qui le relance s'il s'arrête, et **redémarrez-le après chaque déploiement** : il charge le code une seule fois. Avec systemd :
@@ -725,7 +727,7 @@ Le worker exécute les jobs **dans le processus de l'application** (comme `php a
 # /etc/systemd/system/monsite-worker.service
 [Service]
 WorkingDirectory=/srv/monsite
-ExecStart=/srv/monsite/.venv/bin/flask queue:work
+ExecStart=/srv/monsite/.venv/bin/flask queue:work --queue audio,listeners,mails,default
 Restart=always
 
 [Install]
@@ -746,7 +748,7 @@ flask queue:forget <id>           # le supprime
 flask queue:flush                 # les supprime tous
 ```
 
-Ces commandes acceptent `--connection <nom>`. Les outils de RQ (`rq info`, [rq-dashboard](https://github.com/Parallels/rq-dashboard)) marchent aussi, à condition de leur indiquer le sérialiseur JSON : `--serializer rq.serializers.JSONSerializer`.
+Ces commandes couvrent toutes les files de la connexion et acceptent `--connection <nom>`. Les outils de RQ (`rq info`, [rq-dashboard](https://github.com/Parallels/rq-dashboard)) marchent aussi, à condition de leur indiquer le sérialiseur JSON : `--serializer rq.serializers.JSONSerializer`.
 
 ### Mails et écouteurs en file d'attente
 

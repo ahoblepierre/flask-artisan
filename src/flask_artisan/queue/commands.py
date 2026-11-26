@@ -21,20 +21,30 @@ def _rq_connection(name: str | None) -> tuple[str, dict] | None:
     return name, options
 
 
-def _registry(options: dict):
+def _failed(options: dict) -> dict:
+    """{id: registre} des jobs en échec de **toutes** les files de la connexion."""
+    import rq
     from rq.registry import FailedJobRegistry
+    from rq.serializers import JSONSerializer
 
     from flask_artisan.queue import worker
 
-    return FailedJobRegistry(queue=worker.rq_queue(options, options.get("queue") or "default"))
+    queues = rq.Queue.all(connection=worker.connect(options["url"]), serializer=JSONSerializer)
+    found = {}
+    for queue in queues:
+        registry = FailedJobRegistry(queue=queue)
+        for job_id in registry.get_job_ids():
+            found[job_id] = registry
+    return found
 
 
-def _fetch(registry, job_id: str):
+def _fetch(failed: dict, job_id: str):
     from rq.exceptions import NoSuchJobError
     from rq.job import Job
 
-    if job_id not in registry.get_job_ids():
+    if job_id not in failed:
         raise click.ClickException(f"Aucun job en échec avec l'id {job_id!r}.")
+    registry = failed[job_id]
     try:
         return Job.fetch(job_id, connection=registry.connection, serializer=registry.serializer)
     except NoSuchJobError:
@@ -81,13 +91,12 @@ def queue_failed(connection_name):
     """Liste les jobs en échec."""
     if _no_queue(connection_name):
         return
-    registry = _registry(_rq_connection(connection_name)[1])
-    ids = registry.get_job_ids()
-    if not ids:
+    failed = _failed(_rq_connection(connection_name)[1])
+    if not failed:
         click.echo("Aucun job en échec.")
         return
-    for job_id in ids:
-        job = _fetch(registry, job_id)
+    for job_id in failed:
+        job = _fetch(failed, job_id)
         cls = (job.args[0].get("class", "?") if job.args else "?").rsplit(".", 1)[-1]
         result = job.latest_result()
         error = (result.exc_string or "").strip().splitlines()[-1:] if result else []
@@ -103,14 +112,14 @@ def queue_retry(ids, connection_name):
     """Remet en file des jobs en échec (ou `all`), avec tous leurs essais."""
     if _no_queue(connection_name):
         return
-    registry = _registry(_rq_connection(connection_name)[1])
-    targets = registry.get_job_ids() if list(ids) == ["all"] else ids
+    failed = _failed(_rq_connection(connection_name)[1])
+    targets = list(failed) if list(ids) == ["all"] else ids
     for job_id in targets:
-        job = _fetch(registry, job_id)
+        job = _fetch(failed, job_id)
         tries = job.meta.get("tries", 1)
         job.retries_left = tries - 1 if tries > 1 else None  # tous les essais, comme Laravel
         job.save()
-        registry.requeue(job)
+        failed[job_id].requeue(job)
         click.echo(f"Remis en file : {job_id}")
 
 
@@ -122,8 +131,9 @@ def queue_forget(job_id, connection_name):
     """Supprime un job en échec."""
     if _no_queue(connection_name):
         return
-    registry = _registry(_rq_connection(connection_name)[1])
-    registry.remove(_fetch(registry, job_id), delete_job=True)
+    failed = _failed(_rq_connection(connection_name)[1])
+    job = _fetch(failed, job_id)
+    failed[job_id].remove(job, delete_job=True)
     click.echo(f"Supprimé : {job_id}")
 
 
@@ -134,11 +144,10 @@ def queue_flush(connection_name):
     """Supprime tous les jobs en échec."""
     if _no_queue(connection_name):
         return
-    registry = _registry(_rq_connection(connection_name)[1])
-    ids = registry.get_job_ids()
-    for job_id in ids:
+    failed = _failed(_rq_connection(connection_name)[1])
+    for job_id, registry in failed.items():
         registry.remove(job_id, delete_job=True)
-    click.echo(f"{len(ids)} job(s) en échec supprimé(s).")
+    click.echo(f"{len(failed)} job(s) en échec supprimé(s).")
 
 
 COMMANDS = [queue_work, queue_failed, queue_retry, queue_forget, queue_flush]

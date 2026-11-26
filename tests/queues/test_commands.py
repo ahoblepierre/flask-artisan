@@ -88,3 +88,18 @@ def test_sync_connection_has_no_queue(queue_app):
 def test_work_requires_rq_connection(queue_app):
     result = cli(queue_app, "queue:work", "--burst")
     assert result.exit_code != 0 and "sync" in result.output
+
+
+def test_failed_commands_cover_every_queue(rq_app):
+    from .jobs import AudioBoom
+
+    job_id = AudioBoom.dispatch()
+    rq_app.work(("audio",))
+    assert job_id in cli(rq_app, "queue:failed").output
+    assert cli(rq_app, "queue:retry", job_id).exit_code == 0
+    rq_app.work(("audio",))
+    assert cli(rq_app, "queue:forget", job_id).exit_code == 0
+    AudioBoom.dispatch()
+    rq_app.work(("audio",))
+    assert "1 job(s)" in cli(rq_app, "queue:flush").output
+    assert "Aucun job en échec" in cli(rq_app, "queue:failed").output

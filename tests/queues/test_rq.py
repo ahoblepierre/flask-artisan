@@ -127,3 +127,8 @@ def test_missing_rq_message(queue_app, monkeypatch):
     monkeypatch.setitem(sys.modules, "rq", None)
     with pytest.raises(RuntimeError, match=r"flask-artisan\[rq\]"):
         Ping.dispatch("a")
+
+
+def test_connect_reuses_client():
+    pytest.importorskip("redis")
+    assert worker.connect("redis://127.0.0.1:6399/0") is worker.connect("redis://127.0.0.1:6399/0")

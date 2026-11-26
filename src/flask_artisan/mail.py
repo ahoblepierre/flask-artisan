@@ -265,6 +265,9 @@ class Mailer:
 
         if self._faking:
             self._mailer_config(name)
+            from flask_artisan.queue.serialization import serialize
+
+            serialize(SendQueuedMailable.wrap(mailable, envelope, name))  # erreurs vues en test
             record = copy.copy(mailable)
             record._recipients = {k: [a for _, a in v] for k, v in envelope.items()}
             record._mailer = name
