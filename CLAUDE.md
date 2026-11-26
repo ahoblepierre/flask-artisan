@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Flask-Artisan : un framework open source qui apporte les conventions de Laravel à Flask. **Flask reste le moteur** (décision actée) : on ajoute une couche (conteneur, service providers, façades, routage à la Laravel, ORM façon Eloquent sur SQLAlchemy, auth, commandes ajoutées au CLI `flask`) sans casser la compatibilité avec l'écosystème Flask. Le différenciateur face à Masonite est justement d'être du Flask.
 
-Chantiers 1 à 5 de la v0.1 mergés (socle #1, routage #3, ORM #5, auth #7, CLI #9). Publiée sur PyPI (0.1.0 #11, 0.2.0 #17 avec la validation #15, 0.3.0 #22 avec les événements #20, 0.4.0 #26 avec le mail #24, 0.5.0 #30 avec les queues #28).
+Chantiers 1 à 5 de la v0.1 mergés (socle #1, routage #3, ORM #5, auth #7, CLI #9). Publiée sur PyPI (0.1.0 #11, 0.2.0 #17 avec la validation #15, 0.3.0 #22 avec les événements #20, 0.4.0 #26 avec le mail #24, 0.5.0 #30 avec les queues #28, 0.6.0 #34 avec le cache #32).
 
 ## Feuille de route (v0.1 publique = chantiers 1 à 5)
 
