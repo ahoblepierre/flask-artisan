@@ -14,6 +14,7 @@ from flask_artisan.events import Dispatcher
 from flask_artisan.mail import Mailer
 from flask_artisan.providers import ServiceProvider
 from flask_artisan.queue import QueueManager
+from flask_artisan.rate_limiting import RateLimiter
 from flask_artisan.routing import Router
 
 
@@ -63,6 +64,9 @@ class Application(Flask, Container):
         cache = CacheManager(self)
         self.instance("cache", cache)
         self.instance(CacheManager, cache)
+        limiter = RateLimiter(self)
+        self.instance("limiter", limiter)
+        self.instance(RateLimiter, limiter)
         Application.set_instance(self)
 
         self.cli = ArtisanGroup(self.name, app=self)
