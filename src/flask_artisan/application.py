@@ -5,6 +5,7 @@ from pathlib import Path
 from flask import Flask, current_app, has_app_context
 from jinja2 import ChoiceLoader, FileSystemLoader
 
+from flask_artisan.cache import CacheManager
 from flask_artisan.config import Repository
 from flask_artisan.console import COMMANDS, ArtisanGroup
 from flask_artisan.container import Container
@@ -59,6 +60,9 @@ class Application(Flask, Container):
         queue = QueueManager(self)
         self.instance("queue", queue)
         self.instance(QueueManager, queue)
+        cache = CacheManager(self)
+        self.instance("cache", cache)
+        self.instance(CacheManager, cache)
         Application.set_instance(self)
 
         self.cli = ArtisanGroup(self.name, app=self)

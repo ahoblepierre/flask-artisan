@@ -48,3 +48,7 @@ class Mail(Facade):
 
 class Queue(Facade):
     accessor = "queue"
+
+
+class Cache(Facade):
+    accessor = "cache"
