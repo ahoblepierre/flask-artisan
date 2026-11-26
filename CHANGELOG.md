@@ -2,6 +2,12 @@
 
 Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [Non publié]
+
+### Ajouté
+
+- **Événements** : `Dispatcher` toujours présent (façade `Event`, helper `event()`), écouteurs en classe (injection, reconstruits à chaque émission), tuple ou fonction, héritage et arrêt par `False`, `EventServiceProvider` dans le squelette, `Event.fake()` et ses assertions, `flask make:event` et `flask make:listener`.
+
 ## [0.2.0] - 2026-11-26
 
 ### Ajouté

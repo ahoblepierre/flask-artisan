@@ -225,3 +225,51 @@ def test_make_request(artisan):
     path = app.base_path("app/http/requests/store_post_request.py")
     assert issubclass(load(path).StorePostRequest, FormRequest)
     assert_ruff_clean(path)
+
+
+def test_make_event(artisan):
+    import dataclasses
+
+    app, run = artisan
+    assert run("make:event", "OrderShipped").exit_code == 0
+    path = app.base_path("app/events/order_shipped.py")
+    assert dataclasses.is_dataclass(load(path).OrderShipped)
+    assert_ruff_clean(path)
+
+
+def test_make_listener_without_event(artisan):
+    app, run = artisan
+    result = run("make:listener", "SendShipmentNotification")
+    assert result.exit_code == 0, result.output
+    assert "event_service_provider.py" in result.output
+    path = app.base_path("app/listeners/send_shipment_notification.py")
+    assert callable(load(path).SendShipmentNotification().handle)
+    assert_ruff_clean(path)
+
+
+def test_make_listener_with_event_in_subfolder(artisan):
+    app, run = artisan
+    assert run("make:event", "Billing/InvoicePaid").exit_code == 0
+    assert run("make:listener", "MarkPaid", "--event", "Billing/InvoicePaid").exit_code == 0
+    path = app.base_path("app/listeners/mark_paid.py")
+    source = path.read_text()
+    assert "from app.events.billing.invoice_paid import InvoicePaid" in source
+    assert "event: InvoicePaid" in source
+    assert_ruff_clean(path)
+
+
+def test_make_listener_with_missing_event_writes_nothing(artisan):
+    app, run = artisan
+    result = run("make:listener", "MarkPaid", "--event", "Typo")
+    assert result.exit_code != 0
+    assert "app/events/typo.py" in result.output
+    assert not app.base_path("app/listeners/mark_paid.py").exists()
+
+
+def test_make_listener_with_event_prints_listen_line(artisan):
+    _, run = artisan
+    assert run("make:event", "InvoicePaid").exit_code == 0
+    result = run("make:listener", "MarkPaid", "--event", "InvoicePaid")
+    assert "from app.listeners.mark_paid import MarkPaid" in result.output
+    assert "from app.events.invoice_paid import InvoicePaid" in result.output
+    assert "InvoicePaid: [MarkPaid]" in result.output

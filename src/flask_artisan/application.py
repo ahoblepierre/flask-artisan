@@ -8,6 +8,7 @@ from flask_artisan.config import Repository
 from flask_artisan.console import COMMANDS, ArtisanGroup
 from flask_artisan.container import Container
 from flask_artisan.env import load_env_file
+from flask_artisan.events import Dispatcher
 from flask_artisan.providers import ServiceProvider
 from flask_artisan.routing import Router
 
@@ -41,6 +42,9 @@ class Application(Flask, Container):
         router = Router(self)
         self.instance("router", router)
         self.instance(Router, router)
+        events = Dispatcher(self)
+        self.instance("events", events)
+        self.instance(Dispatcher, events)
         Application.set_instance(self)
 
         self.cli = ArtisanGroup(self.name, app=self)

@@ -1,0 +1,8 @@
+from dataclasses import dataclass
+
+
+@dataclass
+class $class_name:
+    # Les données transportées par l'événement, par exemple :
+    # order: Order
+    pass

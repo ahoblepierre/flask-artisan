@@ -1,0 +1,4 @@
+class $class_name:
+    def handle(self, event):
+        # Réagissez à l'événement ici. Renvoyer False arrête les écouteurs suivants.
+        pass

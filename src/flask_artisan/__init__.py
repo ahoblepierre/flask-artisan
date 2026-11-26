@@ -2,8 +2,8 @@ from flask_artisan.env import env  # noqa: I001 — env en premier : config/*.py
 from flask_artisan.application import Application
 from flask_artisan.config import Repository
 from flask_artisan.container import BindingResolutionError, Container
-from flask_artisan.facades import DB, App, Auth, Config, Facade, Route
-from flask_artisan.helpers import app, base_path, config
+from flask_artisan.facades import DB, App, Auth, Config, Event, Facade, Route
+from flask_artisan.helpers import app, base_path, config, event
 from flask_artisan.middleware import HttpKernel, Middleware
 from flask_artisan.providers import ServiceProvider
 from flask_artisan.route_provider import RouteServiceProvider
@@ -19,6 +19,7 @@ __all__ = [
     "BindingResolutionError",
     "Config",
     "Container",
+    "Event",
     "Facade",
     "HttpKernel",
     "Middleware",
@@ -33,4 +34,5 @@ __all__ = [
     "base_path",
     "config",
     "env",
+    "event",
 ]

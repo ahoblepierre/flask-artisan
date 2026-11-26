@@ -202,3 +202,28 @@ def test_generated_requirements_pin_pypi_release(project):
     major, minor = map(int, flask_artisan.__version__.split(".")[:2])
     requirements = (project / "requirements.txt").read_text().splitlines()
     assert f"flask-artisan>={major}.{minor},<{major}.{minor + 1}" in requirements
+
+
+def test_generated_project_events_flow(project):
+    for args in (
+        ("make:event", "OrderShipped"),
+        ("make:listener", "LogShipment", "--event", "OrderShipped"),
+    ):
+        result = run(project, "-m", "flask", *args)
+        assert result.returncode == 0, result.stdout + result.stderr
+    listener = project / "app/listeners/log_shipment.py"
+    listener.write_text(listener.read_text().replace("        pass", '        print("SHIPPED")'))
+    provider = project / "app/providers/event_service_provider.py"
+    source = provider.read_text()
+    assert "class EventServiceProvider" in source
+    provider.write_text(
+        "from app.events.order_shipped import OrderShipped\n"
+        "from app.listeners.log_shipment import LogShipment\n"
+        + source.replace("listen = {}", "listen = {OrderShipped: [LogShipment]}")
+    )
+    code = (
+        "from wsgi import app\nfrom flask_artisan import Event\n"
+        "from app.events.order_shipped import OrderShipped\nEvent.dispatch(OrderShipped())\n"
+    )
+    out = run(project, "-c", code)
+    assert "SHIPPED" in out.stdout, out.stdout + out.stderr
