@@ -167,3 +167,9 @@ def test_deleted_model_counts_as_missing(store, cache_app, caplog):
     store.put("post2", CPost.create(title="b"))
     CPost.query().where("title", "b").first().delete()
     assert store.remember("post2", 60, lambda: "recomputed") == "recomputed"
+
+
+def test_bad_decimal_counts_as_missing(store):
+    k = store.prefix + "k"
+    store._put(k, '{"__decimal__": "abc"}', None)
+    assert store.get("k", "d") == "d"

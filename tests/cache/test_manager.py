@@ -44,3 +44,19 @@ def test_defaults_without_config(make_project):
         assert isinstance(store, FileStore)
         assert store.directory == base / "storage" / "cache"
         assert store.prefix == "blog_cache:"
+
+
+def test_array_expired_key_tolerates_concurrent_removal(clock):
+    store = ArrayStore("p:")
+    store.put("k", 1, 1)
+    clock.advance(2)
+    entry = store._data["p:k"]
+
+    class Racing(dict):
+        def get(self, key, default=None):  # un autre thread supprime la clé entre get et del
+            value = super().get(key, default)
+            super().pop(key, None)
+            return value
+
+    store._data = Racing({"p:k": entry})
+    assert store.get("k") is None

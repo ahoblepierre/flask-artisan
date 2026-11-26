@@ -60,3 +60,24 @@ def test_flush_only_removes_cache_files(tmp_path):
     store.flush()
     assert files(tmp_path) == []
     FileStore("p:", tmp_path / "missing").flush()  # dossier absent : rien à faire
+
+
+def test_flush_keeps_foreign_files_and_pending_writes(tmp_path):
+    store = FileStore("p:", tmp_path)
+    store.put("a", 1)
+    (tmp_path / ".gitignore").write_text("*\n")
+    (tmp_path / "app.log").write_text("log")
+    (tmp_path / ".tmp-pending").write_text("en cours")
+    store.flush()
+    assert files(tmp_path) == [".gitignore", ".tmp-pending", "app.log"]
+
+
+@pytest.mark.parametrize(
+    "content", ['{"expires": "x", "value": "1"}', '{"expires": null, "value": 1}']
+)
+def test_wrong_types_count_as_missing(tmp_path, content):
+    store = FileStore("p:", tmp_path)
+    store.put("k", 1)
+    [name] = files(tmp_path)
+    (tmp_path / name).write_text(content)
+    assert store.get("k", "d") == "d"

@@ -104,7 +104,7 @@ class Store:
 
         try:
             return load(json.loads(text))
-        except (ModelNotFound, TypeError, ValueError) as exc:
+        except (ModelNotFound, TypeError, ValueError, ArithmeticError) as exc:
             # Modèle supprimé, classe déplacée, donnée corrompue : absent, jamais une 404.
             logger.warning("Cache : valeur illisible pour %r, supprimée (%s).", key, exc)
             self._delete(k)
@@ -192,7 +192,7 @@ class ArrayStore(Store):
     def _alive(self, k: str):
         entry = self._data.get(k)
         if entry is not None and entry[0] is not None and entry[0] <= time.time():
-            del self._data[k]
+            self._data.pop(k, None)  # pop : un autre thread a pu la supprimer
             return None
         return entry
 
@@ -227,6 +227,9 @@ class ArrayStore(Store):
         self._data.clear()
 
 
+CACHE_FILE = re.compile(r"[0-9a-f]{64}")
+
+
 class FileStore(Store):
     """Un fichier JSON par clé dans `directory`, nommé par le SHA-256 de la clé."""
 
@@ -242,6 +245,10 @@ class FileStore(Store):
         try:
             entry = json.loads(path.read_text())
             expires, text = entry["expires"], entry["value"]
+            if not isinstance(text, str) or not (
+                expires is None or isinstance(expires, (int, float))
+            ):
+                raise TypeError("format inattendu")
         except FileNotFoundError:
             return None
         except (OSError, ValueError, KeyError, TypeError):
@@ -298,9 +305,11 @@ class FileStore(Store):
         return value + by
 
     def _flush(self):
+        # Seulement nos fichiers (nom = SHA-256) : ni un .gitignore, ni un log, ni une écriture
+        # en cours (.tmp-…) dont le os.replace échouerait.
         if self.directory.is_dir():
             for path in self.directory.iterdir():
-                if path.is_file():
+                if CACHE_FILE.fullmatch(path.name) and path.is_file():
                     path.unlink(missing_ok=True)
 
 
