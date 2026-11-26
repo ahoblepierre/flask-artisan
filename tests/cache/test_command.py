@@ -26,3 +26,23 @@ def test_clear_unknown_store(cache_app, tmp_path):
     configure(cache_app, tmp_path)
     result = cli(cache_app, "cache:clear", "nope")
     assert result.exit_code != 0 and "nope" in result.output
+
+
+def test_clear_reports_store_errors(cache_app, tmp_path, monkeypatch):
+    from flask_artisan import cache
+
+    configure(cache_app, tmp_path, default="redis")
+
+    def unavailable(url):
+        raise RuntimeError('pip install "flask-artisan[redis]"')
+
+    monkeypatch.setattr(cache, "_redis", unavailable)
+    result = cli(cache_app, "cache:clear")
+    assert result.exit_code != 0 and "flask-artisan[redis]" in result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
+def test_default_prefix_exported():
+    from flask_artisan import cache
+
+    assert "default_prefix" in cache.__all__

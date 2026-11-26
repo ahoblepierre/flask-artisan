@@ -22,7 +22,7 @@ from flask.cli import with_appcontext
 
 from flask_artisan.queue.serialization import dump, load
 
-__all__ = ["ArrayStore", "CacheManager", "FileStore", "RedisStore", "Store"]
+__all__ = ["ArrayStore", "CacheManager", "FileStore", "RedisStore", "Store", "default_prefix"]
 
 logger = logging.getLogger("flask_artisan.cache")
 
@@ -50,7 +50,7 @@ def _seconds(ttl) -> int | None:
         return None
     if isinstance(ttl, timedelta):
         ttl = ttl.total_seconds()
-    if isinstance(ttl, bool) or not isinstance(ttl, (int, float)):
+    if isinstance(ttl, bool) or not isinstance(ttl, (int, float)) or not math.isfinite(ttl):
         raise TypeError(f"TTL invalide : {ttl!r} (secondes, timedelta ou None).")
     return math.ceil(ttl)
 
@@ -240,10 +240,22 @@ class FileStore(Store):
     def _path(self, k: str) -> Path:
         return self.directory / hashlib.sha256(k.encode()).hexdigest()
 
+    @staticmethod
+    def _unlink_if_same(path: Path, inode: int | None) -> None:
+        """Supprime seulement le fichier lu : un os.replace concurrent a pu en mettre un neuf."""
+        try:
+            if inode is None or os.stat(path).st_ino == inode:
+                path.unlink(missing_ok=True)
+        except FileNotFoundError:
+            pass
+
     def _read(self, k: str) -> tuple[float | None, str] | None:
         path = self._path(k)
+        inode = None
         try:
-            entry = json.loads(path.read_text())
+            with open(path) as f:
+                inode = os.fstat(f.fileno()).st_ino
+                entry = json.loads(f.read())
             expires, text = entry["expires"], entry["value"]
             if not isinstance(text, str) or not (
                 expires is None or isinstance(expires, (int, float))
@@ -252,11 +264,11 @@ class FileStore(Store):
         except FileNotFoundError:
             return None
         except (OSError, ValueError, KeyError, TypeError):
-            path.unlink(missing_ok=True)  # fichier corrompu : absent
+            self._unlink_if_same(path, inode)  # fichier corrompu : absent
             logger.warning("Cache : fichier illisible pour %r, supprimé.", k)
             return None
         if expires is not None and expires <= time.time():
-            path.unlink(missing_ok=True)
+            self._unlink_if_same(path, inode)
             return None
         return expires, text
 
@@ -267,6 +279,9 @@ class FileStore(Store):
         try:
             with os.fdopen(fd, "w") as f:
                 json.dump({"expires": expires, "value": text}, f)
+            os.chmod(
+                tmp, 0o644
+            )  # mkstemp crée en 0600 : un cron sous un autre utilisateur doit lire
             os.replace(tmp, self._path(k))
         except BaseException:
             Path(tmp).unlink(missing_ok=True)
@@ -325,6 +340,11 @@ def _redis(url: str):
     return Redis.from_url(url)
 
 
+def _text(raw) -> str | None:
+    """bytes ou str selon `decode_responses` du client."""
+    return raw.decode() if isinstance(raw, bytes) else raw
+
+
 class RedisStore(Store):
     """Redis : TTL, `SET NX` et `INCRBY` natifs ; `flush` limité aux clés du préfixe."""
 
@@ -333,8 +353,7 @@ class RedisStore(Store):
         self.client = client
 
     def _get(self, k):
-        raw = self.client.get(k)
-        return None if raw is None else raw.decode()
+        return _text(self.client.get(k))
 
     def _put(self, k, text, seconds):
         self.client.set(k, text, px=None if seconds is None else seconds * 1000)
@@ -352,7 +371,7 @@ class RedisStore(Store):
         pipe.get(k)
         pipe.delete(k)
         raw, _ = pipe.execute()
-        return None if raw is None else raw.decode()
+        return _text(raw)
 
     def _increment(self, k, by):
         from redis.exceptions import ResponseError
@@ -375,10 +394,12 @@ class RedisStore(Store):
             self.client.delete(*batch)
 
 
+DEFAULT_REDIS_URL = "redis://127.0.0.1:6379/0"
+
 DEFAULT_STORES = {
     "array": {"driver": "array"},
     "file": {"driver": "file", "path": "storage/cache"},
-    "redis": {"driver": "redis", "url": "redis://127.0.0.1:6379/0"},
+    "redis": {"driver": "redis"},  # url : REDIS_URL, sinon DEFAULT_REDIS_URL
 }
 
 
@@ -412,7 +433,8 @@ class CacheManager:
         if driver == "file":
             return FileStore(prefix, self._app.base_path(options.get("path", "storage/cache")))
         if driver == "redis":
-            return RedisStore(prefix, _redis(options.get("url", DEFAULT_STORES["redis"]["url"])))
+            url = options.get("url") or os.environ.get("REDIS_URL", DEFAULT_REDIS_URL)
+            return RedisStore(prefix, _redis(url))
         raise ValueError(f"Pilote de cache inconnu : {driver!r} (store {name!r}).")
 
     def __getattr__(self, name: str):
@@ -430,6 +452,10 @@ def cache_clear(store_name):
     name = store_name or manager._config("default", "file")
     try:
         manager.store(name).flush()
-    except ValueError as exc:
+    except (ValueError, RuntimeError, OSError) as exc:
         raise click.ClickException(str(exc)) from None
+    except Exception as exc:
+        if type(exc).__module__.startswith("redis"):  # Redis injoignable, refus d'authentification…
+            raise click.ClickException(f"Redis : {exc}") from None
+        raise
     click.echo(f"Cache vidé : {name}.")

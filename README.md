@@ -834,7 +834,7 @@ Le store se choisit avec `CACHE_STORE` dans `.env` :
 
 `redis` demande redis-py : `pip install "flask-artisan[redis]"` (déjà présent avec `[rq]`). Le cache peut partager le Redis des [queues](#queues) : ses clés portent un préfixe (`CACHE_PREFIX`, par défaut le nom de l'application suivi de `_cache:`), et `Cache.flush()` ne supprime que les clés de ce préfixe, jamais les files d'attente. Aucune version minimale de Redis n'est exigée.
 
-Les stores sont déclarés dans `config/cache.py` (le squelette ajoute `storage/` au `.gitignore`). La configuration est relue à chaque appel ; un projet sans ce fichier utilise `file`.
+Les stores sont déclarés dans `config/cache.py` (le squelette ajoute `storage/` au `.gitignore`). La configuration est relue à chaque appel ; un projet sans ce fichier utilise `file`, et son store `redis` lit `REDIS_URL`. Les fichiers du store `file` sont créés en mode `0644`, lisibles par une commande planifiée qui tournerait sous un autre utilisateur que le serveur web ; `flask cache:clear` n'efface que ces fichiers, jamais un autre fichier du dossier.
 
 `Cache.get(...)` et les autres méthodes visent le store par défaut ; `Cache.store("redis")` en désigne un autre :
 

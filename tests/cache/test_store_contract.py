@@ -173,3 +173,9 @@ def test_bad_decimal_counts_as_missing(store):
     k = store.prefix + "k"
     store._put(k, '{"__decimal__": "abc"}', None)
     assert store.get("k", "d") == "d"
+
+
+@pytest.mark.parametrize("ttl", [float("inf"), float("nan")])
+def test_non_finite_ttl_rejected(store, ttl):
+    with pytest.raises(TypeError):
+        store.put("k", 1, ttl)

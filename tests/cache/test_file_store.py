@@ -81,3 +81,30 @@ def test_wrong_types_count_as_missing(tmp_path, content):
     [name] = files(tmp_path)
     (tmp_path / name).write_text(content)
     assert store.get("k", "d") == "d"
+
+
+def test_expired_read_does_not_delete_fresh_write(tmp_path, monkeypatch):
+    import time as time_module
+
+    store = FileStore("p:", tmp_path)
+    store.put("k", "old", 10)
+    now = time_module.time()
+    calls = []
+
+    def clock():
+        # Juste après la lecture du fichier expiré, une autre requête écrit une valeur fraîche.
+        if not calls:
+            calls.append(1)
+            monkeypatch.setattr(time_module, "time", lambda: now + 20)
+            FileStore("p:", tmp_path).put("k", "fresh")
+        return now + 20
+
+    monkeypatch.setattr(time_module, "time", clock)
+    assert store.get("k") is None
+    assert store.get("k") == "fresh"
+
+
+def test_cache_files_readable_by_group_and_others(tmp_path):
+    FileStore("p:", tmp_path).put("k", 1)
+    [path] = tmp_path.iterdir()
+    assert path.stat().st_mode & 0o777 == 0o644

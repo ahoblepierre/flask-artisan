@@ -61,3 +61,25 @@ def test_missing_redis_message(cache_app, tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "redis", None)
     with pytest.raises(RuntimeError, match=r"flask-artisan\[redis\]"):
         cache_app.make("cache").store().get("k")
+
+
+def test_decode_responses_client():
+    fakeredis = pytest.importorskip("fakeredis")
+    client = fakeredis.FakeRedis(server=fakeredis.FakeServer(), decode_responses=True)
+    store = RedisStore("p:", client)
+    store.put("k", {"a": 1})
+    assert store.get("k") == {"a": 1}
+    assert store.pull("k") == {"a": 1}
+
+
+def test_default_redis_url_from_env(make_project, monkeypatch):
+    from flask_artisan import cache
+    from flask_artisan.application import Application
+
+    seen = []
+    monkeypatch.setattr(cache, "_redis", lambda url: seen.append(url) or object())
+    monkeypatch.setenv("REDIS_URL", "redis://elsewhere:6380/2")
+    app = Application(make_project())
+    with app.app_context():
+        app.make("cache").store("redis")
+    assert seen == ["redis://elsewhere:6380/2"]
