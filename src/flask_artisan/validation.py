@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from urllib.parse import urlparse
 
+from sqlalchemy import column, literal, select, table
 from werkzeug.exceptions import HTTPException
 from werkzeug.wrappers import Response
 
@@ -149,6 +150,34 @@ def _regex(value, params, field, v):
     return isinstance(value, str) and re.search(params[0], value) is not None
 
 
+IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _db_column(params: list[str], field: str) -> str:
+    return params[1] if len(params) > 1 and params[1] else field
+
+
+def _row_exists(params, field, value, ignore=None) -> bool:
+    """Requête Core paramétrée sur la session de la requête (voit les lignes non validées)."""
+    from flask_artisan.facades import DB
+
+    query = (
+        select(literal(1))
+        .select_from(table(params[0]))
+        .where(column(_db_column(params, field)) == value)
+    )
+    if ignore is not None:
+        query = query.where(column(ignore[1]) != ignore[0])
+    return DB.session.execute(query.limit(1)).first() is not None
+
+
+def _unique(value, params, field, v):
+    ignore = None
+    if len(params) > 2 and params[2]:
+        ignore = (params[2], params[3] if len(params) > 3 and params[3] else "id")
+    return not _row_exists(params, field, value, ignore)
+
+
 RULES = {
     "required": _required,
     "required_with": _required_with,
@@ -168,6 +197,8 @@ RULES = {
     "confirmed": _confirmed,
     "same": lambda value, params, field, v: params[0] in v.data and v.data[params[0]] == value,
     "regex": _regex,
+    "unique": _unique,
+    "exists": lambda value, params, field, v: _row_exists(params, field, value),
 }
 
 # Paramètres attendus : (nombre minimal, numériques ?).
@@ -180,6 +211,8 @@ PARAMS = {
     "not_in": (1, False),
     "same": (1, False),
     "regex": (1, False),
+    "unique": (1, False),
+    "exists": (1, False),
 }
 
 SIZE_MESSAGES = {
@@ -219,6 +252,8 @@ MESSAGES = {
     "confirmed": "The :attribute field confirmation does not match.",
     "same": "The :attribute field must match :other.",
     "regex": "The :attribute field format is invalid.",
+    "unique": "The :attribute has already been taken.",
+    "exists": "The selected :attribute is invalid.",
 }
 
 
@@ -233,6 +268,15 @@ def _check_params(name: str, params: list[str], field: str) -> None:
             raise ValueError(
                 f"La règle '{name}' du champ '{field}' attend des nombres : {params}."
             ) from None
+    if name in ("unique", "exists"):
+        names = [params[0], _db_column(params, field)]
+        if name == "unique" and len(params) > 3 and params[3]:
+            names.append(params[3])
+        for ident in names:
+            if not IDENTIFIER.fullmatch(ident):
+                raise ValueError(
+                    f"La règle '{name}' du champ '{field}' : identifiant invalide '{ident}'."
+                )
 
 
 def _parse(spec) -> list[tuple[str, list[str]]]:
