@@ -52,3 +52,7 @@ class Queue(Facade):
 
 class Cache(Facade):
     accessor = "cache"
+
+
+class RateLimiter(Facade):
+    accessor = "limiter"

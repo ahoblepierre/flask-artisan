@@ -4,7 +4,8 @@ from flask_artisan import Route
 
 # Routes préfixées par /api, avec le groupe de middlewares "api" du kernel.
 
-Route.post("/login", AuthController.login).name("api.login")
+# 5 tentatives par minute : contre le test de mots de passe en boucle.
+Route.post("/login", AuthController.login).name("api.login").middleware("throttle:5,1")
 
 with Route.middleware("auth:api"):
     Route.post("/logout", AuthController.logout).name("api.logout")

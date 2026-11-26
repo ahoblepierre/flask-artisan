@@ -8,7 +8,10 @@ from flask_artisan.cache import FileStore
 
 
 def files(directory):
-    return sorted(p.name for p in directory.iterdir()) if directory.exists() else []
+    """Fichiers du dossier, hors `.lock` (verrou flock du store, permanent)."""
+    if not directory.exists():
+        return []
+    return sorted(p.name for p in directory.iterdir() if p.name != ".lock")
 
 
 def test_directory_created_on_first_write(tmp_path):
@@ -100,7 +103,8 @@ def test_expired_read_does_not_delete_fresh_write(tmp_path, monkeypatch):
         return now + 20
 
     monkeypatch.setattr(time_module, "time", clock)
-    assert store.get("k") is None
+    # La relecture sous le verrou voit déjà l'écriture fraîche.
+    assert store.get("k") == "fresh"
     assert store.get("k") == "fresh"
 
 

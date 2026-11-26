@@ -11,6 +11,9 @@ config = {
     "env": env("APP_ENV", "production"),
     "debug": env("APP_DEBUG", False),
     "key": env("APP_KEY", ""),
+    # Nombre de proxys devant l'app (nginx, load balancer) : l'IP du client est lue dans
+    # X-Forwarded-For. 0 sans proxy, sinon un client pourrait falsifier son IP.
+    "trusted_proxies": env("TRUSTED_PROXIES", 0),
     # Enregistrés dans l'ordre (register), puis tous bootés (boot).
     "providers": [
         DatabaseServiceProvider,

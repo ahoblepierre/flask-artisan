@@ -4,6 +4,7 @@ from pathlib import Path
 
 from flask import Flask, current_app, has_app_context
 from jinja2 import ChoiceLoader, FileSystemLoader
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from flask_artisan.cache import CacheManager
 from flask_artisan.config import Repository
@@ -14,6 +15,7 @@ from flask_artisan.events import Dispatcher
 from flask_artisan.mail import Mailer
 from flask_artisan.providers import ServiceProvider
 from flask_artisan.queue import QueueManager
+from flask_artisan.rate_limiting import RateLimiter
 from flask_artisan.routing import Router
 
 
@@ -63,6 +65,9 @@ class Application(Flask, Container):
         cache = CacheManager(self)
         self.instance("cache", cache)
         self.instance(CacheManager, cache)
+        limiter = RateLimiter(self)
+        self.instance("limiter", limiter)
+        self.instance(RateLimiter, limiter)
         Application.set_instance(self)
 
         self.cli = ArtisanGroup(self.name, app=self)
@@ -86,6 +91,11 @@ class Application(Flask, Container):
         self.config["SECRET_KEY"] = key
         self.config["DEBUG"] = _flag(repository.get("app.debug", False))
         self.config.update(repository.get("flask", {}))
+        proxies = _trusted_proxies(repository.get("app.trusted_proxies", 0))
+        if proxies:
+            # IP et schéma seulement : nginx ne pose pas X-Forwarded-Host par défaut, et un hôte
+            # choisi par le client empoisonnerait les url_for(_external=True) (liens des mails).
+            self.wsgi_app = ProxyFix(self.wsgi_app, x_for=proxies, x_proto=proxies)
 
     def register(self, provider_class: type[ServiceProvider]) -> ServiceProvider:
         if provider_class in self._providers:
@@ -140,3 +150,15 @@ def _flag(value) -> bool:
     if isinstance(value, str):
         return value.strip().lower() not in ("0", "false", "no", "")
     return bool(value)
+
+
+def _trusted_proxies(value) -> int:
+    try:
+        number = None if isinstance(value, bool) else int(value or 0)
+    except (TypeError, ValueError):
+        number = None
+    if number is None or number < 0:
+        raise ValueError(
+            f"app.trusted_proxies (TRUSTED_PROXIES) : entier ≥ 0 attendu, reçu {value!r}."
+        )
+    return number

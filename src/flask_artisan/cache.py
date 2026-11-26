@@ -10,8 +10,11 @@ import logging
 import math
 import os
 import re
+import secrets
 import tempfile
+import threading
 import time
+from contextlib import contextmanager
 from datetime import timedelta
 from functools import cache
 from pathlib import Path
@@ -22,7 +25,21 @@ from flask.cli import with_appcontext
 
 from flask_artisan.queue.serialization import dump, load
 
-__all__ = ["ArrayStore", "CacheManager", "FileStore", "RedisStore", "Store", "default_prefix"]
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
+
+__all__ = [
+    "ArrayStore",
+    "CacheManager",
+    "FileStore",
+    "Lock",
+    "LockTimeoutError",
+    "RedisStore",
+    "Store",
+    "default_prefix",
+]
 
 logger = logging.getLogger("flask_artisan.cache")
 
@@ -41,6 +58,8 @@ PUBLIC = (
     "increment",
     "decrement",
     "flush",
+    "lock",
+    "restore_lock",
 )
 
 
@@ -79,6 +98,10 @@ class Store:
         raise NotImplementedError
 
     def _increment(self, k: str, by: int) -> int:
+        raise NotImplementedError
+
+    def _delete_if(self, k: str, text: str) -> bool:
+        """Supprime seulement si la valeur stockée vaut `text` (atomique)."""
         raise NotImplementedError
 
     def _flush(self) -> None:
@@ -174,6 +197,73 @@ class Store:
     def flush(self) -> None:
         self._flush()
 
+    def lock(self, name: str, seconds=0, owner: str | None = None) -> "Lock":
+        return Lock(self, name, seconds, owner)
+
+    def restore_lock(self, name: str, owner: str) -> "Lock":
+        """Le verrou `name` de `owner` (pris ailleurs : autre requête, job) pour le libérer."""
+        return Lock(self, name, 0, owner)
+
+
+class LockTimeoutError(Exception):
+    """Verrou toujours pris : `block` a attendu en vain, ou `with` l'a trouvé pris."""
+
+
+class Lock:
+    """Verrou dans le cache : pris par `add`, libéré seulement par son propriétaire."""
+
+    def __init__(self, store: Store, name: str, seconds=0, owner: str | None = None):
+        if not isinstance(name, str):
+            raise TypeError(f"Un nom de verrou est une chaîne, pas {name!r}.")
+        if not name:
+            raise ValueError("Un nom de verrou ne peut pas être vide.")
+        if owner is not None and not isinstance(owner, str):
+            raise TypeError(f"Le propriétaire d'un verrou est une chaîne, pas {owner!r}.")
+        if owner == "":
+            raise ValueError("Le propriétaire d'un verrou ne peut pas être vide.")
+        seconds = _seconds(seconds)
+        if seconds is not None and seconds < 0:
+            raise ValueError(f"Durée de verrou négative : {seconds} (0 = sans expiration).")
+        self.store, self.name = store, name
+        self.owner = owner or secrets.token_hex(16)
+        self._ttl = seconds or None  # 0 : sans expiration
+        self._k = store._key("lock:" + name)
+        self._text = store._encode(name, self.owner)  # JSON : la lecture tolérante le lit
+
+    def _run(self, callback):
+        try:
+            return callback()
+        finally:
+            self.release()
+
+    def get(self, callback=None):
+        acquired = self.store._add(self._k, self._text, self._ttl)
+        if callback is None or not acquired:
+            return acquired
+        return self._run(callback)
+
+    def block(self, seconds, callback=None):
+        deadline = time.time() + seconds
+        while not self.store._add(self._k, self._text, self._ttl):
+            if time.time() >= deadline:
+                raise LockTimeoutError(f"Verrou {self.name!r} toujours pris après {seconds} s.")
+            time.sleep(0.25)
+        return True if callback is None else self._run(callback)
+
+    def release(self) -> bool:
+        return self.store._delete_if(self._k, self._text)
+
+    def force_release(self) -> None:
+        self.store._delete(self._k)
+
+    def __enter__(self):
+        if not self.get():
+            raise LockTimeoutError(f"Verrou {self.name!r} déjà pris.")
+        return self
+
+    def __exit__(self, *exc):
+        self.release()
+
 
 def _as_int(k: str, text: str) -> int:
     value = json.loads(text)
@@ -188,6 +278,8 @@ class ArrayStore(Store):
     def __init__(self, prefix: str):
         super().__init__(prefix)
         self._data: dict[str, tuple[float | None, str]] = {}
+        # Un processus servi par plusieurs threads ; réentrant : _pull et _delete_if appellent _get.
+        self._mutex = threading.RLock()
 
     def _alive(self, k: str):
         entry = self._data.get(k)
@@ -197,36 +289,47 @@ class ArrayStore(Store):
         return entry
 
     def _get(self, k):
-        entry = self._alive(k)
-        return entry[1] if entry else None
+        with self._mutex:  # _alive supprime une clé expirée : jamais pendant un add concurrent
+            entry = self._alive(k)
+            return entry[1] if entry else None
 
     def _put(self, k, text, seconds):
         self._data[k] = (None if seconds is None else time.time() + seconds, text)
 
     def _add(self, k, text, seconds):
-        if self._alive(k):
-            return False
-        self._put(k, text, seconds)
-        return True
+        with self._mutex:
+            if self._alive(k):
+                return False
+            self._put(k, text, seconds)
+            return True
 
     def _delete(self, k):
         return self._data.pop(k, None) is not None
 
     def _pull(self, k):
-        text = self._get(k)
-        self._data.pop(k, None)
-        return text
+        with self._mutex:
+            text = self._get(k)
+            self._data.pop(k, None)
+            return text
 
     def _increment(self, k, by):
-        entry = self._alive(k)
-        expires, value = (entry[0], _as_int(k, entry[1])) if entry else (None, 0)
-        self._data[k] = (expires, json.dumps(value + by))
-        return value + by
+        with self._mutex:
+            entry = self._alive(k)
+            expires, value = (entry[0], _as_int(k, entry[1])) if entry else (None, 0)
+            self._data[k] = (expires, json.dumps(value + by))
+            return value + by
+
+    def _delete_if(self, k, text):
+        with self._mutex:
+            if self._get(k) != text:
+                return False
+            return self._delete(k)
 
     def _flush(self):
         self._data.clear()
 
 
+_STALE = object()  # FileStore._read : clé expirée ou corrompue, à supprimer sous le verrou
 CACHE_FILE = re.compile(r"[0-9a-f]{64}")
 
 
@@ -249,7 +352,9 @@ class FileStore(Store):
         except FileNotFoundError:
             pass
 
-    def _read(self, k: str) -> tuple[float | None, str] | None:
+    def _read(self, k: str, clean: bool = True):
+        """(expiration, texte), ou None si absente. `clean=False` : une clé expirée ou corrompue
+        renvoie _STALE au lieu d'être supprimée, pour la supprimer sous le verrou."""
         path = self._path(k)
         inode = None
         try:
@@ -264,10 +369,14 @@ class FileStore(Store):
         except FileNotFoundError:
             return None
         except (OSError, ValueError, KeyError, TypeError):
+            if not clean:
+                return _STALE
             self._unlink_if_same(path, inode)  # fichier corrompu : absent
             logger.warning("Cache : fichier illisible pour %r, supprimé.", k)
             return None
         if expires is not None and expires <= time.time():
+            if not clean:
+                return _STALE
             self._unlink_if_same(path, inode)
             return None
         return expires, text
@@ -288,18 +397,39 @@ class FileStore(Store):
             raise
 
     def _get(self, k):
-        entry = self._read(k)
+        # Jamais appelé sous _locked (flock non réentrant) : les sections critiques lisent par _read.
+        entry = self._read(k, clean=False)
+        if entry is _STALE:
+            with self._locked():  # suppression sous le verrou : jamais une écriture concurrente
+                entry = self._read(k)
         return entry[1] if entry else None
 
     def _put(self, k, text, seconds):
         self._write(k, None if seconds is None else time.time() + seconds, text)
 
+    @contextmanager
+    def _locked(self):
+        """Section critique entre processus d'une même machine : flock sur `.lock` du dossier."""
+        if fcntl is None:
+            # shortcut: pas de flock sous Windows, add/increment/verrous non atomiques entre
+            # processus ; store redis si besoin.
+            yield
+            return
+        self.directory.mkdir(parents=True, exist_ok=True)
+        # Lecture seule (créé s'il manque) : flock suffit, même pour un cron sous un autre utilisateur.
+        fd = os.open(self.directory / ".lock", os.O_RDONLY | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            os.close(fd)  # libère le flock
+
     def _add(self, k, text, seconds):
-        # shortcut: lecture puis écriture, pas atomique entre processus ; verrou de fichier si besoin.
-        if self._read(k):
-            return False
-        self._put(k, text, seconds)
-        return True
+        with self._locked():
+            if self._read(k):
+                return False
+            self._put(k, text, seconds)
+            return True
 
     def _delete(self, k):
         path = self._path(k)
@@ -308,16 +438,25 @@ class FileStore(Store):
         return existed
 
     def _pull(self, k):
-        text = self._get(k)
-        self._path(k).unlink(missing_ok=True)
-        return text
+        with self._locked():
+            entry = self._read(k)
+            self._path(k).unlink(missing_ok=True)
+            return entry[1] if entry else None
 
     def _increment(self, k, by):
-        # shortcut: non atomique entre processus (comme _add) ; préférez redis pour des compteurs.
-        entry = self._read(k)
-        expires, value = (entry[0], _as_int(k, entry[1])) if entry else (None, 0)
-        self._write(k, expires, json.dumps(value + by))
-        return value + by
+        with self._locked():
+            entry = self._read(k)
+            expires, value = (entry[0], _as_int(k, entry[1])) if entry else (None, 0)
+            self._write(k, expires, json.dumps(value + by))
+            return value + by
+
+    def _delete_if(self, k, text):
+        with self._locked():
+            entry = self._read(k)
+            if entry is None or entry[1] != text:
+                return False
+            self._path(k).unlink(missing_ok=True)
+            return True
 
     def _flush(self):
         # Seulement nos fichiers (nom = SHA-256) : ni un .gitignore, ni un log, ni une écriture
@@ -345,6 +484,11 @@ def _text(raw) -> str | None:
     return raw.decode() if isinstance(raw, bytes) else raw
 
 
+DELETE_IF = """
+if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end
+"""
+
+
 class RedisStore(Store):
     """Redis : TTL, `SET NX` et `INCRBY` natifs ; `flush` limité aux clés du préfixe."""
 
@@ -364,6 +508,10 @@ class RedisStore(Store):
 
     def _delete(self, k):
         return bool(self.client.delete(k))
+
+    def _delete_if(self, k, text):
+        # register_script est local (objet Script, EVALSHA avec repli sur EVAL) : pas d'aller-retour.
+        return bool(self.client.register_script(DELETE_IF)(keys=[k], args=[text]))
 
     def _pull(self, k):
         # GET + DEL dans une transaction : atomique sans exiger GETDEL (Redis ≥ 6.2).
