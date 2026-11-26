@@ -7,11 +7,12 @@ from collections.abc import Mapping
 from datetime import datetime
 from urllib.parse import urlparse
 
+from flask import has_request_context, request
 from sqlalchemy import column, literal, select, table
 from werkzeug.exceptions import HTTPException
 from werkzeug.wrappers import Response
 
-__all__ = ["ValidationError", "Validator", "validate"]
+__all__ = ["AuthorizationError", "FormRequest", "ValidationError", "Validator", "validate"]
 
 
 def _json_response(body: dict, status: int) -> Response:
@@ -33,6 +34,13 @@ class ValidationError(HTTPException):
         if rest := len(messages) - 1:
             message += f" (and {rest} more error{'s' if rest > 1 else ''})"
         return _json_response({"message": message, "errors": self.errors}, self.code)
+
+
+class AuthorizationError(HTTPException):
+    code = 403
+
+    def get_response(self, environ=None, scope=None) -> Response:
+        return _json_response({"message": "This action is unauthorized."}, self.code)
 
 
 def _empty(value) -> bool:
@@ -366,3 +374,40 @@ class Validator:
 
 def validate(data: Mapping, rules: dict, messages: dict | None = None) -> dict:
     return Validator(data, rules, messages).validated()
+
+
+class FormRequest:
+    """Requête validée : le conteneur la construit pour un paramètre de controller annoté
+    par sa classe ; la construction autorise puis valide, avant l'appel du controller."""
+
+    def __init__(self):
+        if not has_request_context():
+            raise RuntimeError(
+                f"{type(self).__name__} lit la requête HTTP courante : "
+                "construisez-la pendant une requête (ou utilisez validate())."
+            )
+        data = request.args.to_dict()
+        body = request.get_json(silent=True)
+        data.update(body if isinstance(body, dict) else request.form.to_dict())
+        self._data = data
+        if not self.authorize():
+            raise AuthorizationError()
+        self._validated = Validator(data, self.rules(), self.messages()).validated()
+
+    def rules(self) -> dict:
+        raise NotImplementedError(f"{type(self).__name__} doit définir rules().")
+
+    def authorize(self) -> bool:
+        return True
+
+    def messages(self) -> dict:
+        return {}
+
+    def validated(self) -> dict:
+        return dict(self._validated)
+
+    def all(self) -> dict:
+        return dict(self._data)
+
+    def input(self, key: str, default=None):
+        return self._data.get(key, default)
