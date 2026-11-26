@@ -113,6 +113,42 @@ def _date(value, params, field, v):
     return True
 
 
+def _size(value, field, v) -> float | None:
+    """Taille selon le type : valeur (numeric/integer), nombre d'éléments, ou longueur."""
+    if v.names(field) & {"numeric", "integer"}:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None  # la règle de type signale déjà l'erreur
+    if isinstance(value, (list, dict)):
+        return len(value)
+    return len(str(value))
+
+
+def _min(value, params, field, v):
+    size = _size(value, field, v)
+    return size is None or size >= float(params[0])
+
+
+def _max(value, params, field, v):
+    size = _size(value, field, v)
+    return size is None or size <= float(params[0])
+
+
+def _between(value, params, field, v):
+    size = _size(value, field, v)
+    return size is None or float(params[0]) <= size <= float(params[1])
+
+
+def _confirmed(value, params, field, v):
+    key = f"{field}_confirmation"
+    return key in v.data and v.data[key] == value
+
+
+def _regex(value, params, field, v):
+    return isinstance(value, str) and re.search(params[0], value) is not None
+
+
 RULES = {
     "required": _required,
     "required_with": _required_with,
@@ -124,6 +160,44 @@ RULES = {
     "email": _email,
     "url": _url,
     "date": _date,
+    "min": _min,
+    "max": _max,
+    "between": _between,
+    "in": lambda value, params, *_: str(value) in params,
+    "not_in": lambda value, params, *_: str(value) not in params,
+    "confirmed": _confirmed,
+    "same": lambda value, params, field, v: params[0] in v.data and v.data[params[0]] == value,
+    "regex": _regex,
+}
+
+# Paramètres attendus : (nombre minimal, numériques ?).
+PARAMS = {
+    "required_with": (1, False),
+    "min": (1, True),
+    "max": (1, True),
+    "between": (2, True),
+    "in": (1, False),
+    "not_in": (1, False),
+    "same": (1, False),
+    "regex": (1, False),
+}
+
+SIZE_MESSAGES = {
+    "min": {
+        "numeric": "The :attribute field must be at least :min.",
+        "string": "The :attribute field must be at least :min characters.",
+        "array": "The :attribute field must have at least :min items.",
+    },
+    "max": {
+        "numeric": "The :attribute field must not be greater than :max.",
+        "string": "The :attribute field must not be greater than :max characters.",
+        "array": "The :attribute field must not have more than :max items.",
+    },
+    "between": {
+        "numeric": "The :attribute field must be between :min and :max.",
+        "string": "The :attribute field must be between :min and :max characters.",
+        "array": "The :attribute field must have between :min and :max items.",
+    },
 }
 
 PRESENCE = {"required", "required_with"}
@@ -140,7 +214,25 @@ MESSAGES = {
     "email": "The :attribute field must be a valid email address.",
     "url": "The :attribute field must be a valid URL.",
     "date": "The :attribute field must be a valid date.",
+    "in": "The selected :attribute is invalid.",
+    "not_in": "The selected :attribute is invalid.",
+    "confirmed": "The :attribute field confirmation does not match.",
+    "same": "The :attribute field must match :other.",
+    "regex": "The :attribute field format is invalid.",
 }
+
+
+def _check_params(name: str, params: list[str], field: str) -> None:
+    count, numeric = PARAMS.get(name, (0, False))
+    if len(params) < count or not all(params[:count]):
+        raise ValueError(f"La règle '{name}' du champ '{field}' attend {count} paramètre(s).")
+    if numeric:
+        try:
+            [float(p) for p in params[:count]]
+        except ValueError:
+            raise ValueError(
+                f"La règle '{name}' du champ '{field}' attend des nombres : {params}."
+            ) from None
 
 
 def _parse(spec) -> list[tuple[str, list[str]]]:
@@ -160,9 +252,10 @@ class Validator:
         self.custom_messages = messages or {}
         self._errors: dict[str, list[str]] | None = None
         for field, parsed in self.rules.items():
-            for name, _ in parsed:
+            for name, params in parsed:
                 if name not in RULES and name not in MARKERS:
                     raise ValueError(f"Règle de validation inconnue '{name}' (champ '{field}').")
+                _check_params(name, params, field)
 
     def fails(self) -> bool:
         return bool(self.errors())
@@ -180,10 +273,13 @@ class Validator:
             raise ValidationError(self.errors())
         return {field: self.data[field] for field in self.rules if field in self.data}
 
+    def names(self, field: str) -> set[str]:
+        return {name for name, _ in self.rules[field]}
+
     def _run(self) -> dict[str, list[str]]:
         errors = {}
         for field, parsed in self.rules.items():
-            names = {name for name, _ in parsed}
+            names = self.names(field)
             present = field in self.data
             if "sometimes" in names and not present:
                 continue
@@ -199,14 +295,29 @@ class Validator:
                 # None sans nullable échoue toute règle hors présence (comme Laravel).
                 failed = value is None and name not in PRESENCE
                 if failed or not RULES[name](value, params, field, self):
-                    errors.setdefault(field, []).append(self._message(field, name, params))
+                    errors.setdefault(field, []).append(self._message(field, name, params, value))
         return errors
 
-    def _message(self, field: str, rule: str, params: list[str]) -> str:
-        template = MESSAGES[rule]
-        return template.replace(":attribute", field.replace("_", " ")).replace(
-            ":values", ", ".join(params)
-        )
+    def _message(self, field: str, rule: str, params: list[str], value) -> str:
+        template = self.custom_messages.get(f"{field}.{rule}") or self.custom_messages.get(rule)
+        if template is None and rule in SIZE_MESSAGES:
+            if self.names(field) & {"numeric", "integer"}:
+                kind = "numeric"
+            else:
+                kind = "array" if isinstance(value, (list, dict)) else "string"
+            template = SIZE_MESSAGES[rule][kind]
+        template = template or MESSAGES[rule]
+        low = params[0] if params else ""
+        replacements = {
+            ":attribute": field.replace("_", " "),
+            ":values": ", ".join(params),
+            ":other": low.replace("_", " "),
+            ":min": low,
+            ":max": params[-1] if params else "",
+        }
+        for key, text in replacements.items():
+            template = template.replace(key, text)
+        return template
 
 
 def validate(data: Mapping, rules: dict, messages: dict | None = None) -> dict:
