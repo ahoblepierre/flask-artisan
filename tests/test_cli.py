@@ -45,6 +45,7 @@ def test_new_creates_project(project):
         "resources/views/emails/.gitkeep",
         "config/queue.py",
         "app/jobs/__init__.py",
+        "config/cache.py",
     ]:
         assert (project / path).exists(), path
 
@@ -280,3 +281,22 @@ def test_generated_project_queue_flow(project):
     )
     out = run(project, "-c", code)
     assert out.stdout.split() == ["RAN", "FAKED"], out.stdout + out.stderr
+
+
+def test_generated_project_cache_settings(project):
+    assert "CACHE_STORE=file" in (project / ".env").read_text().splitlines()
+    assert "storage/" in (project / ".gitignore").read_text().splitlines()
+
+
+def test_generated_project_cache_flow(project):
+    code = (
+        "from wsgi import app\nfrom flask_artisan import Cache\n"
+        "with app.app_context():\n    print(Cache.remember('k', 60, lambda: 41) + 1)\n"
+    )
+    out = run(project, "-c", code)
+    assert out.stdout.strip() == "42", out.stdout + out.stderr
+    cache_dir = project / "storage" / "cache"
+    assert len(list(cache_dir.iterdir())) == 1
+    result = run(project, "-m", "flask", "cache:clear")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert list(cache_dir.iterdir()) == []

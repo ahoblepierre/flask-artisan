@@ -31,6 +31,7 @@ classifiers = [
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6", "rq>=3,<4", "fakeredis[lua]>=2.20"]
 rq = ["rq>=3,<4"]
+redis = ["redis>=5"]
 pgsql = ["psycopg[binary]>=3.1"]
 mysql = ["PyMySQL>=1.1"]
 

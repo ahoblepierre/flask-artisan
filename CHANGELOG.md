@@ -2,6 +2,16 @@
 
 Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## Non publié
+
+### Ajouté
+
+- **Cache** : façade `Cache` (`get`, `put`, `add`, `forever`, `remember`, `remember_forever`, `has`, `missing`, `pull`, `forget`, `increment`, `decrement`, `flush`, `store(name)`), stores `file` (défaut), `redis` (extra `flask-artisan[redis]`, préfixe, `flush` limité au préfixe) et `array`, valeurs en JSON (modèles par identifiant), `flask cache:clear`.
+
+### Modifié
+
+- Squelette : `config/cache.py`, `CACHE_STORE` dans `.env.example`, `storage/` dans `.gitignore`.
+
 ## [0.5.0] - 2026-11-26
 
 ### Ajouté

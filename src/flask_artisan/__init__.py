@@ -2,7 +2,7 @@ from flask_artisan.env import env  # noqa: I001 — env en premier : config/*.py
 from flask_artisan.application import Application
 from flask_artisan.config import Repository
 from flask_artisan.container import BindingResolutionError, Container
-from flask_artisan.facades import DB, App, Auth, Config, Event, Facade, Mail, Queue, Route
+from flask_artisan.facades import DB, App, Auth, Cache, Config, Event, Facade, Mail, Queue, Route
 from flask_artisan.helpers import app, base_path, config, dispatch, event
 from flask_artisan.middleware import HttpKernel, Middleware
 from flask_artisan.providers import ServiceProvider
@@ -17,6 +17,7 @@ __all__ = [
     "Application",
     "Auth",
     "BindingResolutionError",
+    "Cache",
     "Config",
     "Container",
     "Event",
