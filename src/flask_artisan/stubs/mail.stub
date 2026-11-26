@@ -1,0 +1,11 @@
+from flask_artisan.mail import Mailable
+
+
+class $class_name(Mailable):
+    subject = "$class_name"
+    view = "$view"
+    # text = "$text_view"  # version texte, facultative
+
+    # Les attributs publics sont disponibles dans le template, par exemple :
+    # def __init__(self, order):
+    #     self.order = order

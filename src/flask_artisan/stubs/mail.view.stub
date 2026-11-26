@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="fr">
+  <body>
+    <p>Bonjour,</p>
+    {# Les attributs publics du mailable sont disponibles ici, ex. {{ order.id }} #}
+  </body>
+</html>
