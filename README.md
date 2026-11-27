@@ -48,7 +48,7 @@ with Route.prefix("/admin").name("admin.").middleware("auth"):
 - [Base de données](https://ahoblepierre.github.io/flask-artisan/base-de-donnees/) (modèles façon Eloquent, migrations)
 - [Cache](https://ahoblepierre.github.io/flask-artisan/cache/) (stores `file`, `redis`, `array`)
 - [Stockage de fichiers](https://ahoblepierre.github.io/flask-artisan/stockage/) (façade `Storage`, disques local et S3, uploads)
-- [Événements](https://ahoblepierre.github.io/flask-artisan/evenements/), [mail](https://ahoblepierre.github.io/flask-artisan/mail/), [queues](https://ahoblepierre.github.io/flask-artisan/queues/)
+- [Événements](https://ahoblepierre.github.io/flask-artisan/evenements/), [mail](https://ahoblepierre.github.io/flask-artisan/mail/), [notifications](https://ahoblepierre.github.io/flask-artisan/notifications/), [queues](https://ahoblepierre.github.io/flask-artisan/queues/)
 - [Tâches planifiées](https://ahoblepierre.github.io/flask-artisan/planification/) (`flask schedule:run`, fréquences, verrous)
 - [Console](https://ahoblepierre.github.io/flask-artisan/console/) (`flask make:*`, commandes du projet)
 

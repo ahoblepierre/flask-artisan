@@ -1,0 +1,18 @@
+from flask_artisan.notifications import Notification
+
+# from flask_artisan.queue import ShouldQueue  # envoi par la file : class $class_name(Notification, ShouldQueue)
+
+
+class $class_name(Notification):
+    # Les attributs publics voyagent avec la notification mise en file (un modèle par son id) :
+    # def __init__(self, invoice):
+    #     self.invoice = invoice
+
+    def via(self, notifiable):
+        return ["mail", "database"]
+
+    def to_mail(self, notifiable):
+        raise NotImplementedError("Renvoyez un Mailable (flask make:mail).")
+
+    def to_database(self, notifiable):
+        return {}

@@ -68,6 +68,7 @@ flask_artisan = [
     "skeleton/database/.gitignore",
     "skeleton/database/migrations/.gitkeep",
     "skeleton/resources/views/emails/.gitkeep",
+    "skeleton/app/notifications/.gitkeep",
     "stubs/*",
 ]
 "flask_artisan.database" = ["alembic_env/*"]
