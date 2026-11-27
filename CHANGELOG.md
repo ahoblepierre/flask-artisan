@@ -2,6 +2,12 @@
 
 Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [Non publié]
+
+### Ajouté
+
+- Site de documentation (MkDocs Material, publié sur GitHub Pages) : https://ahoblepierre.github.io/flask-artisan/ ; le README est raccourci et renvoie vers le site (#40).
+
 ## [0.7.0] - 2026-11-26
 
 ### Ajouté

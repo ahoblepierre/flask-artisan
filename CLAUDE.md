@@ -40,7 +40,12 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 .venv/bin/pytest tests/test_container.py::test_bound     # un seul test
 .venv/bin/ruff check . && .venv/bin/ruff format .        # lint + format (la CI vérifie les deux)
 .venv/bin/flask-artisan new /chemin/vers/demo            # générer un projet pour essayer
+.venv/bin/pip install -e ".[docs]" && .venv/bin/mkdocs serve   # prévisualiser le site de doc
 ```
+
+## Documentation
+
+La doc publique vit dans `docs/*.md` (site MkDocs Material, `mkdocs.yml`, publié sur GitHub Pages par `.github/workflows/docs.yml` à chaque push sur `main`) ; `docs/superpowers/` (specs, plans) est exclu du site. Le README reste court (page PyPI, liens absolus seulement). Une fonctionnalité met à jour sa page ; `mkdocs build --strict` échoue sur un lien ou une ancre cassés.
 
 ## Architecture
 
