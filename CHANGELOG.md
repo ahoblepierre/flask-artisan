@@ -14,6 +14,10 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 - `RouteServiceProvider` charge `routes/auth.py` dans le groupe `web` s'il existe (#59).
 - Squelette : `APP_URL` (`config("app.url")`), base des liens envoyés par e-mail, jamais l'en-tête `Host` (#59).
 
+### Modifié
+
+- `RouteServiceProvider` charge désormais `routes/auth.py` s'il existe : un projet qui chargeait déjà ce fichier lui-même (depuis `routes/web.py` ou son propre provider) doit retirer ce chargement, sinon ses routes sont déclarées deux fois (#59).
+
 ## [0.9.0] - 2026-11-27
 
 ### Modifié

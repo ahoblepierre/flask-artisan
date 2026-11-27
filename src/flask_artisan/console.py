@@ -182,7 +182,8 @@ def make_notification(name, force):
 
 
 AUTH_STEPS = """
-Reste à faire à la main :
+Reste à faire à la main (projet généré en 0.9 ou plus : layouts/app.html, old(), errors,
+User avec Notifiable) :
   1. app/models/user.py : ajoutez MustVerifyEmail avant Model (vérification de l'e-mail)
        from flask_artisan.auth import MustVerifyEmail
        class User(MustVerifyEmail, Authenticatable, HasApiTokens, Notifiable, Model): ...

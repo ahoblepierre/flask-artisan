@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import DateTime, String, delete
+from sqlalchemy.exc import IntegrityError
 
 from flask_artisan.database import Mapped, Model, column
 from flask_artisan.database.model import _commit, _db
@@ -54,6 +55,11 @@ class Password:
             return cls.INVALID_USER
         email = user.email  # clé = l'adresse enregistrée (base insensible à la casse)
         db = _db()
+        expire = timedelta(minutes=config("auth.passwords.expire", 60))
+        # Purge des jetons expirés : la table ne garde que les demandes en cours.
+        db.session.execute(
+            delete(PasswordResetToken).where(PasswordResetToken.created_at <= _now() - expire)
+        )
         row = db.session.get(PasswordResetToken, email)
         throttle = timedelta(seconds=config("auth.passwords.throttle", 60))
         if row is not None and _aware(row.created_at) + throttle > _now():
@@ -65,7 +71,11 @@ class Password:
             db.session.add(row)
         row.token = _digest(token)
         row.created_at = _now()
-        _commit(db)
+        try:
+            _commit(db)
+        except IntegrityError:
+            # Une demande simultanée pour la même adresse vient d'insérer sa ligne.
+            return cls.RESET_THROTTLED
         user.send_password_reset_notification(token)
         return cls.RESET_LINK_SENT
 

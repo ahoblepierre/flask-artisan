@@ -49,7 +49,8 @@ def signed_url(endpoint: str, expires: int | None = None, **values) -> str:
 
 
 def has_valid_signature(req) -> bool:
-    params = req.query_string.decode().split("&") if req.query_string else []
+    # latin-1 : jamais d'erreur de décodage ; une URL signée n'a que de l'ASCII (encodé en %).
+    params = req.query_string.decode("latin-1").split("&") if req.query_string else []
     signatures = [p for p in params if p.startswith("signature=")]
     if len(signatures) != 1 or params[-1] != signatures[0]:
         return False

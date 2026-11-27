@@ -86,3 +86,9 @@ def test_app_under_script_root(app, client):
     assert url.startswith("/app/files/3")
     response = client.get(url.removeprefix("/app"), base_url="http://localhost/app/")
     response.assert_ok()
+
+
+def test_non_utf8_query_is_forbidden_not_500(client):
+    # WSGI : QUERY_STRING en latin-1, l'octet 0xFF n'est pas de l'UTF-8 valide.
+    response = client.get("/files/3", environ_overrides={"QUERY_STRING": "a=\xff&signature=x"})
+    assert response.status_code == 403

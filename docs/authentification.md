@@ -52,6 +52,8 @@ La commande ajoute au projet l'inscription, le mot de passe oublié et la vérif
 flask auth:install
 ```
 
+Elle suppose un projet généré en 0.9 ou plus récent : les vues étendent `layouts/app.html` et utilisent `old()` et `errors`, et le `User` doit hériter de `Notifiable`. Sur un projet plus ancien, ajoutez ces éléments d'abord.
+
 Elle crée `routes/auth.py`, quatre controllers dans `app/http/controllers/auth/`, trois FormRequests, quatre vues dans `resources/views/auth/` et `tests/test_auth_flows.py`. Elle ne modifie et n'écrase jamais un fichier : si l'un d'eux existe déjà, elle n'écrit rien, liste les fichiers en conflit et sort avec le code 1.
 
 Il reste six étapes à faire à la main, rappelées en fin de commande :
@@ -86,7 +88,7 @@ Password.send_reset_link(email)              # Password.RESET_LINK_SENT, INVALID
 Password.reset(email, token, new_password)   # Password.PASSWORD_RESET, INVALID_TOKEN ou INVALID_USER
 ```
 
-Le jeton est envoyé par e-mail et seule son empreinte SHA-256 est stockée, une ligne par adresse. Il est valable 60 minutes, et on ne peut en redemander un qu'après 60 secondes. Ces durées se règlent dans `config/auth.py`, avec `"passwords": {"expire": 60, "throttle": 60}`. Le formulaire affiche le même message que l'adresse ait un compte ou non.
+Le jeton est envoyé par e-mail et seule son empreinte SHA-256 est stockée, une ligne par adresse. Il est valable 60 minutes, et on ne peut en redemander un qu'après 60 secondes. Ces durées se règlent dans `config/auth.py`, avec `"passwords": {"expire": 60, "throttle": 60}`. Le formulaire affiche le même message que l'adresse ait un compte ou non. Le temps de réponse, lui, est plus long quand le compte existe, car le mail part pendant la requête : pour masquer cet écart, envoyez la notification par une file en redéfinissant `send_password_reset_notification`. Les jetons expirés sont supprimés à chaque nouvelle demande.
 
 Une réinitialisation réussie supprime le jeton, ferme les sessions ouvertes et **révoque les tokens d'API** de l'utilisateur. Elle ne connecte pas l'utilisateur : il est renvoyé vers `/login`.
 

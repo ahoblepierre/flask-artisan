@@ -135,3 +135,24 @@ def test_token_is_keyed_on_stored_email(ada, fake, monkeypatch):
     assert Password.send_reset_link("ADA@x.org") == Password.RESET_THROTTLED
     token = emailed_token(fake, ada)
     assert Password.reset("Ada@X.org", token, "new-secret") == Password.PASSWORD_RESET
+
+
+def test_concurrent_request_is_throttled_not_500(ada, fake, monkeypatch):
+    Password.send_reset_link("ada@x.org")
+    session = DB.session
+    real_get = session.get
+    # L'autre requête a inséré sa ligne entre notre lecture et notre commit.
+    monkeypatch.setattr(session, "get", lambda *a, **k: None)
+    session.expunge_all()
+    assert Password.send_reset_link("ada@x.org") == Password.RESET_THROTTLED
+    monkeypatch.setattr(session, "get", real_get)
+    fake.assert_sent_times(ResetPassword, 1)
+    assert len(PasswordResetToken.all()) == 1
+
+
+def test_expired_rows_are_purged(app, ada, fake, clock):
+    PwUser.create(email="bob@x.org", password="secret")
+    Password.send_reset_link("bob@x.org")
+    clock(minutes=61)
+    Password.send_reset_link("ada@x.org")
+    assert [row.email for row in PasswordResetToken.all()] == ["ada@x.org"]

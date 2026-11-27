@@ -156,3 +156,15 @@ def test_resend_verification(client, fake):
     client.post("/email/verification-notification").assert_redirect("/verify-email")
     fake.assert_sent_times(VerifyEmail, 2)
     assert fresh(user) is not None
+
+
+@needs_verification
+def test_register_survives_mail_failure(client, fake, monkeypatch):
+    def broken(self):
+        raise ConnectionError("SMTP indisponible")
+
+    monkeypatch.setattr(User, "send_email_verification_notification", broken)
+    user = registered(client)
+    page = client.get("/verify-email").assert_ok().get_data(as_text=True)
+    assert "Renvoyer le lien" in page
+    assert user is not None

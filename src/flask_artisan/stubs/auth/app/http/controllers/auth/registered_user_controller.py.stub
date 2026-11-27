@@ -1,6 +1,6 @@
 from app.http.requests.register_request import RegisterRequest
 from app.models.user import User
-from flask import flash, redirect, render_template, url_for
+from flask import current_app, flash, redirect, render_template, url_for
 
 from flask_artisan import Auth
 from flask_artisan.auth import MustVerifyEmail
@@ -16,7 +16,12 @@ class RegisteredUserController:
         data = request.validated()
         user = User.create(name=data["name"], email=data["email"], password=data["password"])
         Auth.login(user)
-        if isinstance(user, MustVerifyEmail):
-            user.send_email_verification_notification()
         flash("Bienvenue !")
+        if isinstance(user, MustVerifyEmail):
+            try:
+                user.send_email_verification_notification()
+            except Exception:
+                # Le compte existe déjà : l'utilisateur renverra le lien depuis /verify-email.
+                current_app.logger.exception("Envoi du lien de vérification impossible")
+                flash("Le lien de vérification n'a pas pu être envoyé : renvoyez-le.")
         return redirect(url_for("dashboard"))
