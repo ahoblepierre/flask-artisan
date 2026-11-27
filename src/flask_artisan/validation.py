@@ -72,10 +72,15 @@ def _required_with(value, params, field, v):
     return True
 
 
+# Chiffres ASCII seulement : \d (Unicode) et float() accepteraient « ١٢٣ », « 1_000 », « 12 ».
+INTEGER = re.compile(r"-?[0-9]+", re.ASCII)
+NUMERIC = re.compile(r"-?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?", re.ASCII)
+
+
 def _integer(value, params, field, v):
     if isinstance(value, int):
         return not _is_bool(value)
-    return isinstance(value, str) and re.fullmatch(r"-?\d+", value) is not None
+    return isinstance(value, str) and INTEGER.fullmatch(value) is not None
 
 
 def _numeric(value, params, field, v):
@@ -87,10 +92,8 @@ def _numeric(value, params, field, v):
         except OverflowError:  # entier JSON géant
             return False
     if isinstance(value, str):
-        try:
-            return math.isfinite(float(value))
-        except ValueError:
-            return False
+        # isfinite : « 1e999 » a la bonne forme mais déborde.
+        return NUMERIC.fullmatch(value) is not None and math.isfinite(float(value))
     return False
 
 
