@@ -43,6 +43,7 @@ with Route.prefix("/admin").name("admin.").middleware("auth"):
 - [Validation](https://ahoblepierre.github.io/flask-artisan/validation/) (Form Requests, réponses 422)
 - [Authentification](https://ahoblepierre.github.io/flask-artisan/authentification/) (guards session et token)
 - [Limitation de débit et verrous](https://ahoblepierre.github.io/flask-artisan/limitation-de-debit/)
+- [Tests HTTP](https://ahoblepierre.github.io/flask-artisan/tests-http/) (assertions chaînables, `acting_as`)
 - [Base de données](https://ahoblepierre.github.io/flask-artisan/base-de-donnees/) (modèles façon Eloquent, migrations)
 - [Cache](https://ahoblepierre.github.io/flask-artisan/cache/) (stores `file`, `redis`, `array`)
 - [Événements](https://ahoblepierre.github.io/flask-artisan/evenements/), [mail](https://ahoblepierre.github.io/flask-artisan/mail/), [queues](https://ahoblepierre.github.io/flask-artisan/queues/)

@@ -4,6 +4,10 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ## [Non publié]
 
+### Ajouté
+
+- **Tests HTTP** : `app.test_client()` renvoie un client dont les réponses ont des assertions chaînables (`assert_status`, `assert_ok`, `assert_json`, `assert_json_path`, `assert_json_validation_errors`, `assert_header`, `assert_redirect`) et `client.acting_as(user, guard=None)` (session écrite ou vrai token) ; le squelette a un `tests/conftest.py` (base SQLite en mémoire, cache `array`) et un exemple (#46).
+
 ## [0.8.0] - 2026-11-27
 
 ### Ajouté
