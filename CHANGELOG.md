@@ -4,8 +4,11 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ## [Non publié]
 
+## [0.9.0] - 2026-11-27
+
 ### Modifié
 
+- Squelette : le projet généré dépend de `flask-artisan>=0.9,<0.10`.
 - Validation : `integer` et `numeric` n'acceptent plus que des chiffres ASCII, sans espaces ni `_` (`" 12 "`, `"1_000"`, `"١٢٣"`, `".5"` sont refusés) (#53).
 - Toute app déclare la route `GET /storage/<chemin>` (`storage.public`) du disque public, sauf avec `"serve": False` dans `config/filesystems.py`. Elle est ajoutée après les routes des providers : une route `/storage/...` déjà déclarée par le projet garde la priorité (#49).
 - Un échec de validation sur une requête HTML hors API (formulaire, sans en-tête `Accept` JSON) redirige en arrière au lieu de renvoyer le 422 JSON ; envoyez `Accept: application/json` ou déclarez la route dans `routes/api.py` pour garder le JSON (#19).
@@ -120,6 +123,7 @@ Première version publique.
 - **Auth** : façade `Auth` (`attempt`, `validate`, `login`, `logout`, `user`…), guards session et token (tokens d'API en base façon Sanctum), hash automatique du mot de passe, middleware `auth` / `auth:api`, routes `/api/login`, `/api/user`, `/api/logout` dans le squelette.
 - **Console** : `flask make:controller|model|middleware|provider|command`, commandes du projet découvertes dans `app/console/commands/`, `flask route:list`.
 
+[0.9.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.9.0
 [0.8.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.8.0
 [0.7.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.7.0
 [0.6.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.6.0
