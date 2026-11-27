@@ -1,9 +1,11 @@
 import json
 import logging
 
+from flask_artisan.notifications.base import Notification
 from flask_artisan.notifications.models import DatabaseNotification
 from flask_artisan.notifications.notifiable import AnonymousNotifiable
-from flask_artisan.queue.serialization import class_path
+from flask_artisan.queue import Job, ShouldQueue
+from flask_artisan.queue.serialization import class_path, import_class
 
 CHANNELS = ("mail", "database")
 
@@ -20,10 +22,20 @@ class NotificationSender:
         if not isinstance(notifiables, (list, tuple)):
             notifiables = [notifiables]
         first = None
+        queued = isinstance(notification, ShouldQueue)
         # Un destinataire ou un canal en échec n'empêche pas les autres ; la 1re erreur remonte.
+        # En file aussi : le pilote sync exécute le job dans push() et propagerait l'erreur.
         for notifiable in notifiables:
             try:
-                self.send_now(notifiable, notification)
+                if not queued:
+                    self.send_now(notifiable, notification)
+                    continue
+                for channel in self.channels(notifiable, notification):
+                    try:
+                        job = SendQueuedNotification.wrap(notification, notifiable, channel)
+                        self._app.make("queue").push(job)
+                    except Exception as exc:  # noqa: BLE001 (relevée après les autres envois)
+                        first = first or exc
             except Exception as exc:  # noqa: BLE001 (relevée après les autres envois)
                 first = first or exc
         if first is not None:
@@ -92,3 +104,44 @@ class NotificationSender:
             notifiable_id=notifiable.id,
             data=data,
         )
+
+
+class SendQueuedNotification(Job):
+    """Job du framework : une notification `ShouldQueue`, pour un destinataire et un canal."""
+
+    @classmethod
+    def wrap(cls, notification, notifiable, channel: str) -> "SendQueuedNotification":
+        job = cls()
+        job.notification_class = class_path(type(notification))
+        job.notification_data = {
+            k: v for k, v in vars(notification).items() if not k.startswith("_")
+        }
+        # Un modèle voyage par identifiant (sérialisation de la file) ; à la demande : ses routes.
+        if isinstance(notifiable, AnonymousNotifiable):
+            job.notifiable = {"routes": dict(notifiable.routes)}
+        else:
+            job.notifiable = notifiable
+        job.channel = channel
+        for setting in ("tries", "backoff", "timeout"):
+            if hasattr(notification, setting):
+                setattr(job, setting, getattr(notification, setting))
+        job.on_queue(getattr(notification, "queue", None))
+        return job
+
+    def handle(self) -> None:
+        from flask_artisan.helpers import app
+
+        if self.channel not in CHANNELS:
+            raise TypeError(f"Canal invalide dans une notification en file : {self.channel!r}.")
+        cls = import_class(self.notification_class, Notification)
+        notification = cls.__new__(cls)
+        for key, value in (self.notification_data or {}).items():
+            if not isinstance(key, str) or key.startswith("_"):
+                raise TypeError(f"Attribut invalide dans une notification en file : {key!r}.")
+            setattr(notification, key, value)
+        notifiable = self.notifiable
+        if isinstance(notifiable, dict):
+            notifiable = AnonymousNotifiable()
+            notifiable.routes = dict(self.notifiable.get("routes") or {})
+        # Par son nom : le service partagé (mode fake compris), pas une nouvelle instance.
+        app().make("notifications").send_now(notifiable, notification, [self.channel])
