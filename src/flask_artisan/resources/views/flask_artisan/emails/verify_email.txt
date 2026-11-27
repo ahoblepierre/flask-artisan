@@ -1,0 +1,5 @@
+Bonjour,
+
+Confirmez votre adresse e-mail en ouvrant ce lien : {{ url }}
+
+Ce lien expire dans {{ expire }} minutes. Si vous n'avez pas créé de compte, ignorez ce message.
