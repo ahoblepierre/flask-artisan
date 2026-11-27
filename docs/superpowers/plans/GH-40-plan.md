@@ -33,7 +33,7 @@
 
 ---
 
-### Tâche 1 : socle MkDocs
+### Task 1: socle MkDocs
 
 **Fichiers :**
 - Créer : `mkdocs.yml`, `docs/index.md` (provisoire : titre et accroche)
@@ -54,7 +54,7 @@
   git commit -m "docs: socle MkDocs Material (#40)"
   ```
 
-### Tâche 2 : découpage du README en pages
+### Task 2: découpage du README en pages
 
 **Fichiers :**
 - Créer : les 14 pages de la spec (`docs/conteneur.md` … `docs/console.md`).
@@ -85,7 +85,7 @@
 - [ ] **Étape 5 : vérifier à la main le point à surveiller n° 2.** Ouvrir `docs/limitation-de-debit.md` : le lien du « Tester » du cache vise `cache.md#tester`.
 - [ ] **Étape 6 : commit** `docs: pages du site depuis le README (#40)`.
 
-### Tâche 3 : README court et lien Documentation
+### Task 3: README court et lien Documentation
 
 **Fichiers :**
 - Modifier : `README.md`, `pyproject.toml` (`Documentation = "https://ahoblepierre.github.io/flask-artisan/"` dans `[project.urls]`).
@@ -107,7 +107,7 @@
   - Lancer `rm -rf dist && .venv/bin/python -m build && .venv/bin/twine check --strict dist/*`. Attendu : `PASSED` deux fois. Si `build` ou `twine` manque, l'installer dans le venv.
 - [ ] **Étape 4 : commit** `docs: README court, lien vers le site (#40)`.
 
-### Tâche 4 : workflow de déploiement et docs du repo
+### Task 4: workflow de déploiement et docs du repo
 
 **Fichiers :**
 - Créer : `.github/workflows/docs.yml`.
