@@ -122,3 +122,32 @@ def test_work_runs_each_minute_then_stops(cli, monkeypatch):
     assert sleeps[0] == 30
     assert all(0 < s <= 60 for s in sleeps)
     assert log[0] != log[1]  # un contexte d'application neuf par minute
+
+
+def test_next_run_visits_repeated_hour():
+    paris = event().every_fifteen_minutes().timezone("Europe/Paris")
+    # 00:50 UTC = 02:50 heure d'été ; à 01:00 UTC, il est 02:00 heure d'hiver (heure doublée).
+    first = paris.next_run(datetime(2026, 10, 25, 0, 50, tzinfo=UTC), "UTC")
+    assert first.astimezone(UTC) == datetime(2026, 10, 25, 1, 0, tzinfo=UTC)
+    second = paris.next_run(datetime(2026, 10, 25, 1, 5, tzinfo=UTC), "UTC")
+    assert second.astimezone(UTC) == datetime(2026, 10, 25, 1, 15, tzinfo=UTC)
+
+
+def test_work_does_not_replay_a_minute(cli, monkeypatch):
+    app, state, invoke = cli(WORK)
+    sleeps = []
+
+    def fake_sleep(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) == 3:
+            raise KeyboardInterrupt
+        # Réveil en avance : l'horloge reste dans la minute déjà traitée au 2e tour.
+        if len(sleeps) == 1:
+            state["now"] = NOW + timedelta(minutes=1)
+        else:
+            state["now"] = NOW + timedelta(minutes=1, seconds=59)
+
+    monkeypatch.setattr(scheduling, "_sleep", fake_sleep)
+    result = invoke("schedule:work")
+    assert result.exit_code == 0, result.output
+    assert len(app.base_path("routes/console.py.log").read_text().split()) == 1

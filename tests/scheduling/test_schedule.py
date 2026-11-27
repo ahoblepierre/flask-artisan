@@ -21,6 +21,10 @@ def report():
     pass
 
 
+def greet(n, x=0):
+    pass
+
+
 def test_facade_registers_events(make_project):
     app = Application(make_project())
     with app.app_context():
@@ -139,5 +143,28 @@ def test_job_records_queue_and_connection(make_project):
 def test_call_records_arguments(make_project):
     app = Application(make_project())
     with app.app_context():
-        event = Schedule.call(report, 1, x=2)
+        event = Schedule.call(greet, 1, x=2)
     assert (event.args, event.kwargs) == ((1,), {"x": 2})
+
+
+def test_call_validates_arguments_at_declaration(make_project):
+    app = Application(make_project())
+
+    def two(a, b):
+        pass
+
+    def star(*items):
+        pass
+
+    def positional_only(a, /):
+        pass
+
+    with app.app_context():
+        with pytest.raises(ValueError, match="call"):
+            Schedule.call(two, 1, 2, 3)
+        with pytest.raises(ValueError, match=r"\*items"):
+            Schedule.call(star, 1, 2)
+        with pytest.raises(ValueError, match="a"):
+            Schedule.call(positional_only, 1)
+        Schedule.call(star)  # sans argument : rien à perdre
+        Schedule.call(two, 1, b=2)

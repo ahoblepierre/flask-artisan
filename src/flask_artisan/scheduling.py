@@ -225,27 +225,43 @@ class Event:
         au-delà de 366 jours."""
         tz = zone(self.tz or default_tz, "timezone")
         cron = self._cron
-        start = after.astimezone(tz).replace(second=0, microsecond=0, tzinfo=None)
-        moment = start + timedelta(minutes=1)
-        limit = start + timedelta(days=366)
+        # On avance en UTC (chaque instant réel une fois : heure sautée absente, heure doublée
+        # visitée deux fois, comme is_due), en sautant les jours et heures locales sans match.
+        moment = after.astimezone(timezone.utc).replace(second=0, microsecond=0)
+        moment += timedelta(minutes=1)
+        limit = moment + timedelta(days=366)
         while moment <= limit:
-            if not (cron.matches_month(moment) and cron.matches_day(moment)):
-                moment = (moment + timedelta(days=1)).replace(hour=0, minute=0)
-            elif not cron.matches_hour(moment):
-                moment = (moment + timedelta(hours=1)).replace(minute=0)
-            elif not cron.matches(moment):
-                moment += timedelta(minutes=1)
+            local = moment.astimezone(tz)
+            wall = local.replace(tzinfo=None)
+            if not (cron.matches_month(wall) and cron.matches_day(wall)):
+                midnight = datetime.combine(wall.date() + timedelta(days=1), datetime.min.time())
+                following = midnight.replace(tzinfo=tz).astimezone(timezone.utc)
+                moment = following if following > moment else moment + timedelta(minutes=1)
+            elif not cron.matches_hour(wall):
+                moment += timedelta(minutes=60 - wall.minute)
+            elif cron.matches(wall):
+                return local
             else:
-                local = moment.replace(tzinfo=tz)
-                # Heure inexistante (passage à l'heure d'été) : l'aller-retour UTC la décale.
-                if local.astimezone(timezone.utc).astimezone(tz).replace(tzinfo=None) == moment:
-                    return local
                 moment += timedelta(minutes=1)
         return None
 
     def is_due(self, now: datetime, default_tz: str) -> bool:
         local = now.astimezone(zone(self.tz or default_tz, "timezone"))
         return self._cron.matches(local.replace(second=0, microsecond=0, tzinfo=None))
+
+
+def _check_arguments(fn, args: tuple, kwargs: dict) -> None:
+    """Les positionnels sont passés par nom au conteneur : *args et paramètres positionnels
+    seuls ne peuvent pas les recevoir. Vérifié à la déclaration, pas à l'exécution."""
+    try:
+        bound = inspect.signature(fn).bind_partial(*args, **kwargs).arguments
+    except TypeError as exc:
+        raise ValueError(f"call : arguments invalides pour {fn!r} ({exc}).") from None
+    for name, param in inspect.signature(fn).parameters.items():
+        if name in bound and name not in kwargs and param.kind is param.VAR_POSITIONAL:
+            raise ValueError(f"call : *{name} ne peut pas recevoir d'arguments planifiés.")
+        if name in bound and param.kind is param.POSITIONAL_ONLY:
+            raise ValueError(f"call : le paramètre {name!r} est positionnel seul (avant /).")
 
 
 def _check(value, low: int, high: int | None, method: str, label: str) -> None:
@@ -282,6 +298,7 @@ class Schedule:
         return self._add(event)
 
     def call(self, fn, *args, **kwargs) -> Event:
+        _check_arguments(fn, args, kwargs)
         return self._add(Event("call", fn, args, kwargs))
 
     def _add(self, event: Event) -> Event:
@@ -434,13 +451,19 @@ def schedule_work():
     app = current_app._get_current_object()
     schedule = _schedule()
     click.echo("Planificateur démarré (Ctrl+C pour arrêter).")
+    last = None
     try:
         while True:
             now = _now()
             _sleep(60 - now.second - now.microsecond / 1_000_000)
+            minute = _now().replace(second=0, microsecond=0)
+            # Réveil en avance ou horloge qui recule : une minute n'est jamais rejouée.
+            if last is not None and minute <= last:
+                continue
+            last = minute
             # Un contexte neuf par minute : sa fin retire la session de base de données.
             with app.app_context():
-                schedule.run_due(_now(), click.echo)
+                schedule.run_due(minute, click.echo)
     except KeyboardInterrupt:
         click.echo("Planificateur arrêté.")
 

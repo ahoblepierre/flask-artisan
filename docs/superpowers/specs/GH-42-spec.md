@@ -85,14 +85,14 @@ Les arguments invalides lèvent `ValueError` au moment de la déclaration, avec 
 
 - Cinq champs : minute (0-59), heure (0-23), jour du mois (1-31), mois (1-12), jour de semaine (0-7, où 0 et 7 désignent dimanche).
 - Chaque champ accepte `*`, `n`, `a-b`, `*/n`, `a-b/n` et les listes séparées par des virgules. Les noms (`mon`, `jan`) et les macros (`@daily`) ne sont pas acceptés.
-- Sémantique du cron classique : si le jour du mois **et** le jour de semaine sont tous deux restreints, la tâche est due quand l'un **ou** l'autre correspond.
+- Sémantique du planificateur de Laravel (le cron classique traite aussi `*/n` comme libre) : si le jour du mois **et** le jour de semaine sont tous deux restreints, la tâche est due quand l'un **ou** l'autre correspond.
 - Une tâche est due quand l'heure courante, tronquée à la minute et convertie dans son fuseau (celui de la tâche, sinon `app.timezone`), correspond à l'expression.
 
 ### Fuseau horaire
 
 - `config/app.py` du squelette : `"timezone": env("APP_TIMEZONE", "UTC")`. Sans cette clé, la valeur est `UTC`.
 - Le nom est validé au chargement du planning. Une valeur inconnue lève `ValueError` en nommant `APP_TIMEZONE`.
-- Changement d'heure : comme cron, on compare l'heure locale. Une heure qui n'existe pas (passage à l'heure d'été) est sautée. Une heure qui existe deux fois (passage à l'heure d'hiver) peut lancer la tâche deux fois. C'est documenté.
+- Changement d'heure : comme le planificateur de Laravel, on compare l'heure locale. Une heure qui n'existe pas (passage à l'heure d'été) est sautée. Une heure qui existe deux fois (passage à l'heure d'hiver) peut lancer la tâche deux fois. C'est documenté.
 - Windows n'a pas de base de fuseaux horaires : on ajoute la dépendance `tzdata; sys_platform == "win32"`.
 
 ### Exécution

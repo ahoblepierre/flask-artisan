@@ -5,8 +5,10 @@ Les tâches récurrentes (un rapport chaque matin, un nettoyage toutes les 5 min
 ## Installer la ligne cron
 
 ```bash
-* * * * * cd /chemin/du/projet && .venv/bin/flask schedule:run >> /dev/null 2>&1
+* * * * * cd /chemin/du/projet && .venv/bin/flask schedule:run >> storage/logs/schedule.log 2>&1
 ```
+
+Les traces des tâches en échec sortent sur stderr : gardez-les dans un fichier de log (créez `storage/logs/`) plutôt que de les envoyer vers `/dev/null`.
 
 En développement, ou dans un conteneur sans cron, `flask schedule:work` fait la même chose dans une boucle (voir [plus bas](#schedulework)).
 
@@ -34,7 +36,7 @@ Trois types de tâches :
 
 | Tâche | Ce qui s'exécute |
 |-------|------------------|
-| `Schedule.command("emails:send --force")` | une commande `flask` (du framework ou de `app/console/commands/`), dans le même processus |
+| `Schedule.command("emails:send --force")` | une commande `flask` du framework ou de `app/console/commands/`, dans le même processus (les commandes propres à Flask comme `routes` ou `shell`, et celles des extensions déclarées par point d'entrée, ne sont pas visibles) |
 | `Schedule.job(job, queue=None, connection=None)` | le job est **envoyé** dans la queue ; le planificateur n'attend pas sa fin |
 | `Schedule.call(fn, *args, **kwargs)` | la fonction, avec l'injection du conteneur pour les paramètres annotés |
 
@@ -64,7 +66,7 @@ Une tâche qui échoue (exception, verrou injoignable, commande inconnue, `sys.e
 
 Les méthodes s'enchaînent : `Schedule.command("report").every_fifteen_minutes().weekdays()`. Sans fréquence, une tâche s'exécute chaque minute.
 
-Les expressions cron ont 5 champs (minute, heure, jour du mois, mois, jour de semaine) et acceptent `*`, `n`, `a-b`, `*/n`, `a-b/n` et les listes `a,b`. Le jour de semaine va de 0 à 7 (0 et 7 = dimanche). Les noms (`mon`, `jan`) et les macros (`@daily`) ne sont pas acceptés. Comme dans cron, si le jour du mois **et** le jour de semaine sont restreints, la tâche est due quand l'un **ou** l'autre correspond.
+Les expressions cron ont 5 champs (minute, heure, jour du mois, mois, jour de semaine) et acceptent `*`, `n`, `a-b`, `*/n`, `a-b/n` et les listes `a,b`. Le jour de semaine va de 0 à 7 (0 et 7 = dimanche). Les noms (`mon`, `jan`) et les macros (`@daily`) ne sont pas acceptés. Comme dans le planificateur de Laravel, si le jour du mois **et** le jour de semaine sont restreints (autrement que par `*`), la tâche est due quand l'un **ou** l'autre correspond. Attention : `monthly_on(1).weekdays()` donne `0 0 1 * 1-5`, qui tourne le 1er du mois **et** chaque jour de semaine. Pour « le 1er, s'il tombe en semaine », testez le jour dans la tâche.
 
 Un argument invalide (`daily_at("25:00")`, `weekly_on(7)`, une expression mal formée) lève `ValueError` dès la déclaration.
 
@@ -82,7 +84,7 @@ Une tâche peut avoir son propre fuseau :
 Schedule.command("report").daily_at("08:00").timezone("America/New_York")
 ```
 
-Au changement d'heure, le planificateur se comporte comme cron : une heure qui n'existe pas (passage à l'heure d'été, 2 h 30 un dimanche de mars à Paris) est sautée, et une heure qui existe deux fois (passage à l'heure d'hiver) peut lancer la tâche deux fois. Pour une tâche qui ne doit jamais sauter, choisissez une heure hors de cette plage, ou `UTC`.
+Au changement d'heure, le planificateur se comporte comme celui de Laravel (cron, lui, compense pour les tâches à heure fixe) : une heure qui n'existe pas (passage à l'heure d'été, 2 h 30 un dimanche de mars à Paris) est sautée, et une heure qui existe deux fois (passage à l'heure d'hiver) peut lancer la tâche deux fois. Pour une tâche qui ne doit jamais sauter, choisissez une heure hors de cette plage, ou `UTC`.
 
 ## Éviter les doubles exécutions
 
@@ -94,7 +96,7 @@ Schedule.command("report").daily_at("08:00").on_one_server()
 - `without_overlapping(minutes=1440)` : si l'exécution précédente tourne encore, la tâche est sautée (`Sautée (déjà en cours) : …`). Le verrou est libéré à la fin, même en cas d'échec ; `minutes` est sa durée maximale si le processus meurt.
 - `on_one_server()` : sur plusieurs serveurs qui lancent tous `schedule:run`, un seul exécute la tâche pour une minute donnée. Les autres affichent `Sautée (autre serveur) : …`.
 
-Les deux reposent sur les [verrous](limitation-de-debit.md#verrous) du store de cache par défaut. `on_one_server` n'a de sens qu'avec un store partagé entre les serveurs, donc `redis` (voir [Quel store choisir](limitation-de-debit.md#quel-store-choisir)).
+Les deux reposent sur les [verrous](limitation-de-debit.md#verrous) du store de cache par défaut. `flask cache:clear` vide aussi ces verrous : une tâche en cours pourrait alors être relancée. `on_one_server` n'a de sens qu'avec un store partagé entre les serveurs, donc `redis` (voir [Quel store choisir](limitation-de-debit.md#quel-store-choisir)).
 
 Pour un job, `without_overlapping` couvre l'envoi dans la queue, pas l'exécution par le worker.
 
