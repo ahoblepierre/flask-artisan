@@ -17,10 +17,28 @@ class NotificationSender:
 
     def __init__(self, app):
         self._app = app
+        # Mode fake : un état du service, vu aussi par ceux qui le tiennent déjà (comme Mail).
+        self._faking = False
+        self._recorded: list = []
+
+    def fake(self) -> "NotificationFake":
+        """Enregistre les notifications, sans rien envoyer ni mettre en file."""
+        self._faking = True
+        self._recorded = []
+        return NotificationFake(self, self._recorded)
+
+    def restore(self) -> None:
+        self._faking = False
 
     def send(self, notifiables, notification) -> None:
         if not isinstance(notifiables, (list, tuple)):
             notifiables = [notifiables]
+        if self._faking:
+            for notifiable in notifiables:
+                self._recorded.append(
+                    (notifiable, notification, self.channels(notifiable, notification))
+                )
+            return
         first = None
         queued = isinstance(notification, ShouldQueue)
         # Un destinataire ou un canal en échec n'empêche pas les autres ; la 1re erreur remonte.
@@ -145,3 +163,73 @@ class SendQueuedNotification(Job):
             notifiable.routes = dict(self.notifiable.get("routes") or {})
         # Par son nom : le service partagé (mode fake compris), pas une nouvelle instance.
         app().make("notifications").send_now(notifiable, notification, [self.channel])
+
+
+def _same(a, b) -> bool:
+    """Même destinataire : même modèle (type et id), ou le même objet à la demande."""
+    if isinstance(a, AnonymousNotifiable) or isinstance(b, AnonymousNotifiable):
+        return a is b
+    return type(a) is type(b) and getattr(a, "id", None) == getattr(b, "id", None)
+
+
+class NotificationFake:
+    """Assertions sur les notifications enregistrées depuis `Notification.fake()`."""
+
+    def __init__(self, sender: NotificationSender, recorded: list):
+        self._sender = sender
+        self._recorded = recorded
+
+    def restore(self) -> None:
+        if self._sender._recorded is self._recorded:  # pas remplacé par un fake() plus récent
+            self._sender.restore()
+
+    def __enter__(self) -> "NotificationFake":  # noqa: PYI034 (typing.Self exige 3.11)
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.restore()
+
+    def sent(self, notification_class: type) -> list:
+        """(destinataire, notification, canaux) des notifications de cette classe."""
+        return [r for r in self._recorded if isinstance(r[1], notification_class)]
+
+    def _matching(self, notifiable, notification_class, callback) -> list:
+        return [
+            r
+            for r in self.sent(notification_class)
+            if _same(r[0], notifiable) and (callback is None or callback(r[1], r[2]))
+        ]
+
+    def assert_sent_to(self, notifiable, notification_class: type, callback=None) -> None:
+        if not self._matching(notifiable, notification_class, callback):
+            raise AssertionError(
+                f"Notification {notification_class.__name__} non envoyée à {notifiable!r}."
+            )
+
+    def assert_not_sent_to(self, notifiable, notification_class: type, callback=None) -> None:
+        if self._matching(notifiable, notification_class, callback):
+            raise AssertionError(
+                f"Notification {notification_class.__name__} envoyée à {notifiable!r}."
+            )
+
+    def assert_sent_times(self, notification_class: type, times: int) -> None:
+        count = len(self.sent(notification_class))
+        if count != times:
+            raise AssertionError(
+                f"Notification {notification_class.__name__} envoyée {count} fois, attendu {times}."
+            )
+
+    def assert_nothing_sent(self) -> None:
+        if self._recorded:
+            names = ", ".join(type(r[1]).__name__ for r in self._recorded)
+            raise AssertionError(f"Notifications envoyées : {names}.")
+
+    def assert_sent_on_demand(self, notification_class: type, callback=None) -> None:
+        if not [
+            r
+            for r in self.sent(notification_class)
+            if isinstance(r[0], AnonymousNotifiable) and (callback is None or callback(r[1], r[2]))
+        ]:
+            raise AssertionError(
+                f"Notification {notification_class.__name__} non envoyée à la demande."
+            )
