@@ -101,3 +101,8 @@ def test_integer_ascii_only(value, ok):
 )
 def test_numeric_ascii_only(value, ok):
     assert (errors({"n": value}, {"n": "numeric"}) == {}) is ok
+
+
+def test_long_integer_string_is_numeric():
+    assert errors({"n": "1" * 5000}, {"n": "integer"}) == {}
+    assert errors({"n": "1" * 5000}, {"n": "numeric"}) == {}

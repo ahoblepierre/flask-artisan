@@ -1,3 +1,5 @@
+import logging
+import sys
 import typing
 
 import pytest
@@ -155,7 +157,32 @@ def unreadable(request: "Inconnu" = None):  # noqa: F821
     return {"ok": True}
 
 
-def test_form_request_default_with_string_annotations(routed_app):
-    # Annotations illisibles : la vérification n'empêche pas d'enregistrer la route.
-    app = routed_app(lambda: Route.post("/p", unreadable))
+def test_form_request_default_with_string_annotations(routed_app, caplog):
+    # Annotations illisibles : la route est enregistrée, et un avertissement la nomme.
+    with caplog.at_level(logging.WARNING):
+        app = routed_app(lambda: Route.post("/p", unreadable))
+    assert any(rule.rule == "/p" for rule in app.url_map.iter_rules())
+    assert "/p" in caplog.text and "Inconnu" in caplog.text
+
+
+def test_bound_form_request_with_default_allowed(make_project):
+    from flask_artisan import Application
+    from flask_artisan.providers import ServiceProvider
+    from flask_artisan.routing import RouteError
+
+    class Bind(ServiceProvider):
+        def register(self):
+            self.app.bind(StoreRequest, StoreRequest)
+
+        def boot(self):
+            Route.post("/p", store_with_default)
+
+    app = Application(make_project())
+    if sys.version_info < (3, 11):
+        # 3.10 : get_type_hints fait de « = None » un Optional ; le conteneur ne voit plus la
+        # liaison et prendrait le défaut, donc la route reste refusée.
+        with pytest.raises(RouteError):
+            app.register(Bind)
+        return
+    app.register(Bind)
     assert any(rule.rule == "/p" for rule in app.url_map.iter_rules())

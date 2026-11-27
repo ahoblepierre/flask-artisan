@@ -27,7 +27,7 @@ class PostController:
         return Post.create(**request.validated()), 201   # seulement les champs avec une règle
 ```
 
-Le paramètre annoté par la `FormRequest` ne doit pas avoir de valeur par défaut (`request: StorePostRequest = None`) : le conteneur prendrait la valeur par défaut et la validation serait sautée, donc la route est refusée (`RouteError`) à l'enregistrement.
+Le paramètre annoté par la `FormRequest` ne doit pas avoir de valeur par défaut (`request: StorePostRequest = None`) : le conteneur prendrait la valeur par défaut et la validation serait sautée, donc la route est refusée (`RouteError`) à l'enregistrement. Seule exception : une FormRequest liée explicitement dans le conteneur (`app.bind(...)`) et annotée par sa classe seule (pas `| None`), que le conteneur construit avant le défaut.
 
 Données lues : paramètres de l'URL fusionnés avec le corps (JSON objet, sinon formulaire). En cas d'échec, réponse **422** :
 

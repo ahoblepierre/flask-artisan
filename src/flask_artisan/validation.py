@@ -93,7 +93,10 @@ def _numeric(value, params, field, v):
             return False
     if isinstance(value, str):
         # isfinite : « 1e999 » a la bonne forme mais déborde.
-        return NUMERIC.fullmatch(value) is not None and math.isfinite(float(value))
+        if NUMERIC.fullmatch(value) is None:
+            return False
+        # Un entier est toujours un nombre (float("1" * 5000) déborde) ; « 1e999 » non.
+        return INTEGER.fullmatch(value) is not None or math.isfinite(float(value))
     return False
 
 

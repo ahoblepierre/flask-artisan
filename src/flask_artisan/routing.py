@@ -1,6 +1,7 @@
 import importlib.util
 import inspect
 import json
+import logging
 import sys
 import types
 import typing
@@ -20,6 +21,9 @@ DONT_FLASH = {"password", "password_confirmation", "current_password", "_token"}
 # Budget des saisies flashées, en JSON échappé (\uXXXX) comme dans le cookie de session :
 # au-delà d'environ 4 Ko, le navigateur ignorerait le cookie. Les plus grosses sautent d'abord.
 MAX_OLD_BYTES = 2000
+
+
+logger = logging.getLogger(__name__)
 
 
 class RouteError(Exception):
@@ -184,7 +188,7 @@ class Router:
                     f"Middleware inconnu '{exc.args[0]}' sur la route {route.rule} : "
                     "déclarez-le dans `middleware` ou `groups` du kernel."
                 ) from None
-            _check_form_request_defaults(route)
+            _check_form_request_defaults(self._app, route)
             view = self._view(route, stack)
             self._app.add_url_rule(route.rule, endpoint, view, methods=route.methods)
             self.registered.append((route, endpoint, stack))
@@ -256,19 +260,27 @@ class Router:
         return view
 
 
-def _check_form_request_defaults(route: PendingRoute) -> None:
+def _check_form_request_defaults(app, route: PendingRoute) -> None:
     """Une FormRequest avec valeur par défaut : le conteneur prendrait le défaut, sans valider."""
     cls, target = route.handler
     fn = getattr(cls, target) if cls else target
     try:
         hints = typing.get_type_hints(fn)
-    except Exception:  # noqa: BLE001 (annotations illisibles : le conteneur le signalera à l'appel)
+    except Exception as exc:  # noqa: BLE001 (le conteneur échouera à l'appel : on prévient tôt)
+        logger.warning(
+            "Route %s : annotations illisibles (%s) ; l'appel échouera, et une FormRequest "
+            "avec valeur par défaut n'a pas pu être vérifiée.",
+            route.rule,
+            exc,
+        )
         return
     for name, param in inspect.signature(fn).parameters.items():
         hint = hints.get(name)
         # StoreRequest | None, Optional[...] (et, en 3.10, tout `= None` : get_type_hints l'ajoute).
         union = typing.get_origin(hint) in (typing.Union, types.UnionType)
         candidates = typing.get_args(hint) if union else (hint,)
+        if not union and app.bound(hint):
+            continue  # liée explicitement : le conteneur la construit (et la valide) avant le défaut
         if param.default is not param.empty and any(
             isinstance(c, type) and issubclass(c, FormRequest) for c in candidates
         ):
