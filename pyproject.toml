@@ -34,6 +34,7 @@ rq = ["rq>=3,<4"]
 redis = ["redis>=5"]
 pgsql = ["psycopg[binary]>=3.1"]
 mysql = ["PyMySQL>=1.1"]
+docs = ["mkdocs>=1.6,<2", "mkdocs-material>=9.5,<10"]
 
 [project.scripts]
 flask-artisan = "flask_artisan.cli:main"

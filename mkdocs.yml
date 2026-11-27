@@ -1,0 +1,68 @@
+site_name: Flask-Artisan
+site_description: Les conventions de Laravel, mais c'est du Flask.
+site_url: https://ahoblepierre.github.io/flask-artisan/
+repo_url: https://github.com/ahoblepierre/flask-artisan
+repo_name: ahoblepierre/flask-artisan
+
+exclude_docs: |
+  superpowers/
+
+theme:
+  name: material
+  language: fr
+  features:
+    - navigation.sections
+    - content.code.copy
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Passer en mode sombre
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Passer en mode clair
+
+plugins:
+  - search:
+      lang: fr
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+
+nav:
+  - Accueil: index.md
+  - Les bases:
+      - Conteneur: conteneur.md
+      - Service providers: service-providers.md
+      - Configuration: configuration.md
+      - Façades: facades.md
+  - HTTP:
+      - Routage: routage.md
+      - Validation: validation.md
+      - Authentification: authentification.md
+      - Limitation de débit et verrous: limitation-de-debit.md
+  - Données:
+      - Base de données: base-de-donnees.md
+      - Cache: cache.md
+  - Tâches de fond:
+      - Événements: evenements.md
+      - Mail: mail.md
+      - Queues: queues.md
+  - Console: console.md
