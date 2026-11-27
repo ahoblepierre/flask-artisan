@@ -88,3 +88,25 @@ class TestClient(FlaskClient):
         base = response_wrapper or application.response_class
         wrapper = type("TestResponse", (TestResponse, base), {})
         super().__init__(application, wrapper, *args, **kwargs)
+
+    def acting_as(self, user, guard: str | None = None):
+        """Authentifie les requêtes suivantes par le vrai guard (session écrite, ou vrai token)."""
+        # Import tardif : flask_artisan.auth déclare la table des tokens.
+        from flask_artisan.auth.manager import (
+            SESSION_HASH_KEY,
+            SESSION_KEY,
+            AuthManager,
+            TokenGuard,
+            _fingerprint,
+        )
+
+        with self.application.app_context():
+            resolved = self.application.make(AuthManager).guard(guard)
+            if isinstance(resolved, TokenGuard):
+                token = user.create_token("test")
+                self.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+                return self
+        with self.session_transaction() as session:
+            session[SESSION_KEY] = user.id
+            session[SESSION_HASH_KEY] = _fingerprint(user)
+        return self
