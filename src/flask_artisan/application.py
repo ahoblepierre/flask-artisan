@@ -19,6 +19,7 @@ from flask_artisan.rate_limiting import RateLimiter
 from flask_artisan.routing import Router
 from flask_artisan.scheduling import Schedule
 from flask_artisan.testing import TestClient
+from flask_artisan.views import age_flash, template_context
 
 
 class Application(Flask, Container):
@@ -41,6 +42,8 @@ class Application(Flask, Container):
             [FileSystemLoader(base / "resources" / "views"), FileSystemLoader(base / "templates")]
         )
         self.test_client_class = TestClient  # à l'instance, comme jinja_loader
+        self.before_request(age_flash)
+        self.context_processor(template_context)
         self._base_path = base
         self._providers: dict[type, ServiceProvider] = {}
         self._booted = False
