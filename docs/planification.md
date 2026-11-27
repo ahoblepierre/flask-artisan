@@ -38,9 +38,9 @@ Trois types de tâches :
 | `Schedule.job(job, queue=None, connection=None)` | le job est **envoyé** dans la queue ; le planificateur n'attend pas sa fin |
 | `Schedule.call(fn, *args, **kwargs)` | la fonction, avec l'injection du conteneur pour les paramètres annotés |
 
-Les tâches dues s'exécutent l'une après l'autre, dans l'ordre de déclaration. Pour un travail long, utilisez `Schedule.job` : le worker s'en charge et le planificateur passe à la suite. La classe du job doit être importable (dans `app/jobs/`, par exemple), pas définie dans `routes/console.py`.
+Les tâches dues s'exécutent l'une après l'autre, dans l'ordre de déclaration, chacune dans son propre contexte d'application (sa fin retire la session de base de données, comme pour un job). Pour un travail long, utilisez `Schedule.job` : le worker s'en charge et le planificateur passe à la suite. La classe du job doit être importable (dans `app/jobs/`, par exemple), pas définie dans `routes/console.py`.
 
-Une tâche qui échoue (exception, commande inconnue, code de sortie différent de 0) affiche sa trace sur stderr ; les tâches suivantes s'exécutent quand même, et `schedule:run` sort avec le code 1.
+Une tâche qui échoue (exception, verrou injoignable, commande inconnue, `sys.exit` avec un code différent de 0 ou un message) affiche sa trace sur stderr ; les tâches suivantes s'exécutent quand même, et `schedule:run` sort avec le code 1.
 
 `routes/console.py` n'est chargé que par les commandes `schedule:*` : une erreur dans ce fichier ne bloque pas l'app web.
 
@@ -103,6 +103,8 @@ Une lambda ou une fonction locale doit recevoir un nom avant ces deux méthodes,
 ```python
 Schedule.call(lambda: ...).name("purge").without_overlapping()
 ```
+
+De même, deux tâches verrouillées qui ont le même nom et la même fréquence (la même fonction avec des arguments différents, par exemple) sont refusées au chargement : donnez-leur un nom différent avec `name(...)`.
 
 ## `schedule:work`
 

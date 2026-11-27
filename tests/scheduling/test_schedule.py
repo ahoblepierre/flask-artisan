@@ -63,9 +63,18 @@ def test_app_timezone_used(scheduled):
 
 
 def test_invalid_app_timezone_names_env_var(scheduled):
-    scheduled("from flask_artisan import Schedule\nSchedule.command('a')\n", timezone="'Nowhere/X'")
+    with pytest.raises(ValueError, match="APP_TIMEZONE"):
+        scheduled("", timezone="'Nowhere/X'")
     with pytest.raises(ValueError, match="APP_TIMEZONE"):
         Schedule.due_events(AT_0913)
+
+
+def test_invalid_app_timezone_cli_message(make_project):
+    app = Application(make_project(timezone="'Nowhere/X'"))
+    result = app.test_cli_runner().invoke(args=["schedule:list"])
+    assert result.exit_code == 1
+    assert "APP_TIMEZONE" in result.output
+    assert "Traceback" not in result.output
 
 
 def test_load_runs_file_and_clears(scheduled):

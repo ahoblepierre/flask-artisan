@@ -305,6 +305,7 @@ class Schedule:
     def load(self, path: Path) -> None:
         """Vide le registre puis exécute routes/console.py ; un fichier absent est ignoré."""
         self._events = []
+        self.timezone()  # APP_TIMEZONE invalide : détecté au chargement, pas une minute plus tard
         path = Path(path)
         if not path.exists():
             return
@@ -314,6 +315,22 @@ class Schedule:
             spec.loader.exec_module(module)
         except Exception as exc:
             raise click.ClickException(f"Erreur dans {path} : {exc}") from exc
+        self._check_lock_names()
+
+    def _check_lock_names(self) -> None:
+        """Deux tâches verrouillées au même identifiant se bloqueraient : l'une serait sautée."""
+        default = self.timezone()
+        seen = set()
+        for event in self._events:
+            if event.overlap_minutes is None and not event.one_server:
+                continue
+            ident = event.lock_id(default)
+            if ident in seen:
+                raise click.ClickException(
+                    f"Deux tâches verrouillées portent le nom {event.description!r} avec la même "
+                    "fréquence : donnez-leur un nom différent avec name(...)."
+                )
+            seen.add(ident)
 
     def run_due(self, now: datetime, echo) -> bool:
         """Exécute les tâches dues à `now`, l'une après l'autre ; False si une a échoué."""
@@ -328,29 +345,36 @@ class Schedule:
         return ok
 
     def _run(self, event: Event, now: datetime, default_tz: str, echo) -> bool:
-        cache = self._app.make("cache")
-        ident = event.lock_id(default_tz)
-        if event.one_server:
-            minute = now.astimezone(timezone.utc).strftime("%Y%m%d%H%M")
-            # Jamais libéré : le premier serveur qui le prend exécute la tâche pour cette minute.
-            if not cache.lock(f"schedule:{ident}:{minute}", 3600).get():
-                echo(f"Sautée (autre serveur) : {event.description}")
-                return True
         lock = None
-        if event.overlap_minutes is not None:
-            lock = cache.lock(f"schedule:{ident}", event.overlap_minutes * 60)
-            if not lock.get():
-                echo(f"Sautée (déjà en cours) : {event.description}")
-                return True
-        echo(f"Exécution : {event.description}")
         try:
-            self._execute(event)
-        except Exception:  # noqa: BLE001 — une tâche en échec ne doit pas arrêter les suivantes
+            cache = self._app.make("cache")
+            ident = event.lock_id(default_tz)
+            if event.one_server:
+                minute = now.astimezone(timezone.utc).strftime("%Y%m%d%H%M")
+                # Jamais libéré : le premier serveur qui le prend exécute la tâche cette minute.
+                if not cache.lock(f"schedule:{ident}:{minute}", 3600).get():
+                    echo(f"Sautée (autre serveur) : {event.description}")
+                    return True
+            if event.overlap_minutes is not None:
+                candidate = cache.lock(f"schedule:{ident}", event.overlap_minutes * 60)
+                if not candidate.get():
+                    echo(f"Sautée (déjà en cours) : {event.description}")
+                    return True
+                lock = candidate
+            echo(f"Exécution : {event.description}")
+            # Un contexte par tâche, comme un job du worker : sa fin retire la session.
+            with self._app.app_context():
+                self._execute(event)
+        # Une tâche en échec (verrou injoignable, sys.exit compris) n'arrête pas les suivantes.
+        except (Exception, SystemExit):  # noqa: BLE001
             click.echo(traceback.format_exc(), err=True)
             return False
         finally:
             if lock is not None:
-                lock.release()
+                try:
+                    lock.release()
+                except Exception:  # noqa: BLE001 — le TTL libérera le verrou
+                    click.echo(traceback.format_exc(), err=True)
         echo("OK")
         return True
 
@@ -364,8 +388,10 @@ class Schedule:
                 code = exc.code
             except click.ClickException as exc:
                 raise RuntimeError(f"{event.description} : {exc.format_message()}") from None
-            if isinstance(code, int) and code != 0:
-                raise RuntimeError(f"{event.description} : code de sortie {code}")
+            # Comme Python : None et 0 réussissent, un autre entier ou un message échoue.
+            # main() renvoie aussi le code d'un click Exit ; il ne distingue pas un `return 3`.
+            if (isinstance(code, int) and code != 0) or isinstance(code, str):
+                raise RuntimeError(f"{event.description} : code de sortie {code!r}")
         elif event.kind == "job":
             job = event.target.on_queue(event.queue) if event.queue else event.target
             queue = self._app.make("queue")
@@ -386,7 +412,10 @@ def _sleep(seconds: float) -> None:
 
 def _schedule():
     schedule = current_app.make("schedule")
-    schedule.load(current_app.base_path("routes/console.py"))
+    try:
+        schedule.load(current_app.base_path("routes/console.py"))
+    except ValueError as exc:  # APP_TIMEZONE invalide : un message, pas une trace
+        raise click.ClickException(str(exc)) from None
     return schedule
 
 
