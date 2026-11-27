@@ -2,6 +2,7 @@ import importlib.util
 import inspect
 import json
 import sys
+import types
 import typing
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -265,13 +266,14 @@ def _check_form_request_defaults(route: PendingRoute) -> None:
         return
     for name, param in inspect.signature(fn).parameters.items():
         hint = hints.get(name)
-        if (
-            isinstance(hint, type)
-            and issubclass(hint, FormRequest)
-            and param.default is not param.empty
+        # StoreRequest | None, Optional[...] (et, en 3.10, tout `= None` : get_type_hints l'ajoute).
+        union = typing.get_origin(hint) in (typing.Union, types.UnionType)
+        candidates = typing.get_args(hint) if union else (hint,)
+        if param.default is not param.empty and any(
+            isinstance(c, type) and issubclass(c, FormRequest) for c in candidates
         ):
             raise RouteError(
-                f"Route {route.rule} : le paramètre '{name}' ({hint.__name__}) ne doit pas avoir "
+                f"Route {route.rule} : le paramètre '{name}' (FormRequest) ne doit pas avoir "
                 "de valeur par défaut : le conteneur la prendrait et la validation serait sautée."
             )
 

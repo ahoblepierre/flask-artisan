@@ -1,3 +1,5 @@
+import typing
+
 import pytest
 from flask import request as flask_request
 
@@ -131,7 +133,17 @@ class DefaultCtl:
         return {}
 
 
-@pytest.mark.parametrize("handler", [store_with_default, DefaultCtl.store])
+def store_optional(request: StoreRequest | None = None):
+    return {}
+
+
+def store_typing_optional(request: typing.Optional[StoreRequest] = None):  # noqa: UP045
+    return {}
+
+
+@pytest.mark.parametrize(
+    "handler", [store_with_default, DefaultCtl.store, store_optional, store_typing_optional]
+)
 def test_form_request_default_refused(routed_app, handler):
     from flask_artisan.routing import RouteError
 
