@@ -4,10 +4,17 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ## [Non publié]
 
+## [0.8.0] - 2026-11-27
+
 ### Ajouté
 
 - **Tâches planifiées** : `routes/console.py` avec la façade `Schedule` (`command`, `job`, `call`), fréquences (`cron`, `every_five_minutes`, `hourly`, `daily_at`, `weekly_on`, `monthly_on`, `weekdays`…), `timezone`, `without_overlapping`, `on_one_server`, `due_events` pour les tests ; commandes `flask schedule:run`, `schedule:work`, `schedule:list` ; config `app.timezone` (`APP_TIMEZONE`, défaut UTC) (#42).
 - Site de documentation (MkDocs Material, publié sur GitHub Pages) : https://ahoblepierre.github.io/flask-artisan/ ; le README est raccourci et renvoie vers le site (#40).
+
+### Modifié
+
+- Squelette : le projet généré dépend de `flask-artisan>=0.8,<0.9`, contient `routes/console.py` (exemples commentés) et `APP_TIMEZONE=UTC`.
+- La page PyPI affiche le README court ; la documentation complète est sur le site.
 
 ## [0.7.0] - 2026-11-26
 
@@ -93,6 +100,7 @@ Première version publique.
 - **Auth** : façade `Auth` (`attempt`, `validate`, `login`, `logout`, `user`…), guards session et token (tokens d'API en base façon Sanctum), hash automatique du mot de passe, middleware `auth` / `auth:api`, routes `/api/login`, `/api/user`, `/api/logout` dans le squelette.
 - **Console** : `flask make:controller|model|middleware|provider|command`, commandes du projet découvertes dans `app/console/commands/`, `flask route:list`.
 
+[0.8.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.8.0
 [0.7.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.7.0
 [0.6.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.6.0
 [0.5.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.5.0
