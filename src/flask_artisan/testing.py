@@ -1,5 +1,8 @@
 """Client de test du framework : `app.test_client()` renvoie des réponses à assertions chaînables."""
 
+from contextlib import nullcontext
+
+from flask import current_app, has_app_context
 from flask.testing import FlaskClient
 from werkzeug.test import TestResponse as BaseTestResponse
 
@@ -100,7 +103,9 @@ class TestClient(FlaskClient):
             _fingerprint,
         )
 
-        with self.application.app_context():
+        # Réutilise le contexte ouvert par l'appelant : en pousser un autre retirerait sa session de base.
+        reuse = has_app_context() and current_app._get_current_object() is self.application
+        with nullcontext() if reuse else self.application.app_context():
             resolved = self.application.make(AuthManager).guard(guard)
             if isinstance(resolved, TokenGuard):
                 token = user.create_token("test")

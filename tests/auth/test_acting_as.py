@@ -65,3 +65,18 @@ def test_acting_as_unknown_guard(setup):
 def test_acting_as_returns_client(setup):
     client, a, _ = setup
     assert client.acting_as(a) is client
+
+
+def test_acting_as_keeps_callers_db_session(setup):
+    from sqlalchemy import inspect
+
+    from flask_artisan import DB
+
+    client, a, _ = setup
+    with client.application.app_context():
+        member = AMember.find(a.id)
+        session = DB.session
+        for guard in (None, "api"):
+            client.acting_as(member, guard)
+            assert DB.session is session
+            assert not inspect(member).detached
