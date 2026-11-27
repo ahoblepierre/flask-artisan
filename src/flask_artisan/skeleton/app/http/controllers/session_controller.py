@@ -21,4 +21,4 @@ class SessionController:
 
     def destroy(self):
         Auth.logout()
-        return redirect("/")
+        return redirect(url_for("home"))

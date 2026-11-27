@@ -7,11 +7,12 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 ### Modifié
 
 - Un échec de validation sur une requête HTML hors API (formulaire, sans en-tête `Accept` JSON) redirige en arrière au lieu de renvoyer le 422 JSON ; envoyez `Accept: application/json` ou déclarez la route dans `routes/api.py` pour garder le JSON (#19).
+- `expects_json` reconnaît aussi `X-Requested-With: XMLHttpRequest` ; le middleware `auth` répond 401 JSON sur une route de `routes/api.py` au lieu de rediriger vers `login` (#19).
 - Une `AuthorizationError` (403) sur une requête HTML hors API rend la page 403 HTML au lieu du JSON (#19).
 
 ### Ajouté
 
-- **Vues HTML** : une erreur de validation sur un formulaire HTML redirige vers la page précédente (même site) avec `errors` et `old()` dans les templates ; les routes de `routes/api.py` restent toujours en JSON ; `csrf_field()`, `csrf_token()` et le middleware `VerifyCsrfToken` (419) ; le squelette a un layout, une page de connexion (`/login`, `/logout`, `/dashboard`), le CSRF dans le groupe `web` et `SESSION_COOKIE_SAMESITE = "Lax"` (#19).
+- **Vues HTML** : une erreur de validation sur un formulaire HTML redirige vers la page précédente (même site) avec `errors` et `old()` dans les templates (saisies bornées à environ 2 Ko, sans mots de passe) ; les routes de `routes/api.py` restent toujours en JSON ; `csrf_field()`, `csrf_token()` et le middleware `VerifyCsrfToken` (419) ; le squelette a un layout, une page de connexion (`/login`, `/logout`, `/dashboard`), le CSRF dans le groupe `web` et `SESSION_COOKIE_SAMESITE = "Lax"` (#19).
 - **Tests HTTP** : `app.test_client()` renvoie un client dont les réponses ont des assertions chaînables (`assert_status`, `assert_ok`, `assert_json`, `assert_json_path`, `assert_json_validation_errors`, `assert_header`, `assert_redirect`) et `client.acting_as(user, guard=None)` (session écrite ou vrai token) ; le squelette a un `tests/conftest.py` (base SQLite en mémoire, cache `array`) et un exemple (#46).
 
 ## [0.8.0] - 2026-11-27

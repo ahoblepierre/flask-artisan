@@ -15,9 +15,15 @@ PAGE_EXPIRED = (
 )
 
 
+def _running_tests() -> bool:
+    # TESTING seul ne suffit pas (un TESTING oublié en production couperait le CSRF) :
+    # il faut aussi APP_ENV=testing, comme runningUnitTests de Laravel.
+    return current_app.testing and current_app.make("config").get("app.env") == "testing"
+
+
 class VerifyCsrfToken(Middleware):
     def handle(self, request, next):
-        if request.method in SAFE_METHODS or current_app.testing:
+        if request.method in SAFE_METHODS or _running_tests():
             return next(request)
         sent = request.form.get("_token") or request.headers.get("X-CSRF-TOKEN") or ""
         # session.get, jamais csrf_token() : un jeton créé ici ne protégerait rien.

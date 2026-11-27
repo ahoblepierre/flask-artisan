@@ -58,10 +58,12 @@ Quand une [validation](validation.md) échoue (`FormRequest`, `validate()` ou un
 | Requête | Réponse |
 |---------|---------|
 | route de `routes/api.py` | toujours le **422 JSON** |
-| requête qui attend du JSON (`Content-Type` JSON, ou un en-tête `Accept` qui préfère le JSON) | **422 JSON** |
+| requête qui attend du JSON (`Content-Type` JSON, un en-tête `Accept` qui préfère le JSON, ou `X-Requested-With: XMLHttpRequest`) | **422 JSON** |
 | les autres (un formulaire HTML) | **redirection 302** vers la page précédente, avec les erreurs et les saisies gardées pour la requête suivante |
 
-La « page précédente » est l'en-tête `Referer`, s'il pointe vers le même site. Sinon, la redirection va vers `/`, ce qui exclut toute redirection vers un site extérieur.
+La « page précédente » est l'en-tête `Referer`, s'il pointe vers le même site (même schéma et même hôte). Sinon, la redirection va vers la racine de l'app, ce qui exclut toute redirection vers un site extérieur. Derrière un proxy TLS ou nginx, réglez `TRUSTED_PROXIES` (voir [Derrière un proxy](limitation-de-debit.md#derriere-un-proxy)) : sans lui, l'app se croit en `http://` alors que le `Referer` est en `https://`, et chaque erreur renvoie à la racine.
+
+Un appel `fetch` sur une route web doit envoyer `Accept: application/json` ou `X-Requested-With: XMLHttpRequest` pour recevoir le 422 JSON : sinon il suit la redirection et reçoit le HTML du formulaire.
 
 Un refus d'autorisation (`authorize()` qui renvoie `False`) suit la même règle : 403 JSON pour une API, page 403 HTML pour un formulaire.
 
@@ -89,7 +91,7 @@ Dans tous les templates :
 Les erreurs et les saisies ne vivent que pour la requête qui suit la redirection. Pour les garder, la session étant un cookie signé :
 
 - les champs `password`, `password_confirmation` et `current_password` ne sont jamais gardés ;
-- une saisie de plus de 1 000 caractères ne l'est pas non plus, et `old()` rend alors la valeur par défaut. Au-delà d'environ 4 Ko, le navigateur ignorerait le cookie : l'utilisateur perdrait sa session en même temps que ses saisies ;
+- les saisies gardées tiennent dans un budget d'environ 2 Ko, mesuré comme dans le cookie (un caractère non latin y prend 6 octets). Au-delà, les plus grosses saisies sont écartées d'abord, et `old()` rend leur valeur par défaut. Sans ce budget, le cookie dépasserait environ 4 Ko et le navigateur l'ignorerait : la page du formulaire reviendrait sans erreurs ni saisies ;
 - pour un champ à valeurs multiples, seule la première valeur est gardée.
 
 Côté Python, `from flask_artisan.views import ErrorBag, errors, old`.
@@ -113,7 +115,7 @@ fetch("/posts", {method: "POST", headers: {"X-CSRF-TOKEN": document.querySelecto
 
 Le jeton change à chaque connexion et à chaque déconnexion, parce que `Auth.login` et `Auth.logout` vident la session. Les routes de `routes/api.py` ne sont pas protégées par CSRF : elles s'authentifient par token, pas par cookie. Le squelette pose aussi `SESSION_COOKIE_SAMESITE = "Lax"` dans `config/flask.py`.
 
-Pendant les tests (`app.testing = True`, posé par le `tests/conftest.py` du squelette), le contrôle est sauté, comme dans Laravel.
+Pendant les tests, le contrôle est sauté, comme dans Laravel. Il faut **à la fois** `app.testing = True` et `APP_ENV=testing`, que pose le `tests/conftest.py` du squelette : un `TESTING` oublié dans la config de production ne coupe donc pas la protection.
 
 ## Messages flash
 
@@ -130,6 +132,6 @@ Le projet généré contient un parcours complet avec le guard session :
 | `POST /logout` (`logout`) | déconnexion, retour à `/` |
 | `GET /dashboard` (`dashboard`) | page protégée par `auth` |
 
-Le middleware `auth` renvoie un invité vers la route `login`. `POST /login` a `throttle:5,1`, comme `/api/login`. La clé du throttle ne contient pas la route : une même adresse IP a donc 5 essais par minute pour les deux pages réunies.
+Le middleware `auth` renvoie un invité vers la route `login`, sauf sur une route de `routes/api.py` ou pour une requête qui attend du JSON : celles-ci reçoivent le 401 JSON. `POST /login` a `throttle:5,1`, comme `/api/login`. La clé du throttle ne contient pas la route : une même adresse IP a donc 5 essais par minute pour les deux pages réunies.
 
 Les tests du parcours sont dans `tests/test_web_auth.py`, et les [assertions de test HTTP](tests-http.md) sont décrites sur leur page.

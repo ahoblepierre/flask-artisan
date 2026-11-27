@@ -60,3 +60,9 @@ def test_csrf_skipped_when_testing(app, client):
 def test_csrf_non_ascii_token_is_419(client):
     token(client)
     client.post("/submit", data={"_token": "é"}).assert_status(419)
+
+
+def test_csrf_not_skipped_outside_testing_env(app, client):
+    app.testing = True
+    app.make("config").set("app.env", "production")
+    client.post("/submit").assert_status(419)

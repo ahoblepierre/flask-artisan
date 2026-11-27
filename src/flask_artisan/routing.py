@@ -1,5 +1,6 @@
 import importlib.util
 import inspect
+import json
 import sys
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -14,8 +15,9 @@ from flask_artisan.validation import AuthorizationError, ValidationError
 
 # Jamais gardés en session pour old() (comme dontFlash de Laravel).
 DONT_FLASH = {"password", "password_confirmation", "current_password", "_token"}
-# Au-delà, une saisie n'est pas flashée : la session est un cookie d'environ 4 Ko.
-MAX_OLD_LENGTH = 1000
+# Budget des saisies flashées, en JSON échappé (\uXXXX) comme dans le cookie de session :
+# au-delà d'environ 4 Ko, le navigateur ignorerait le cookie. Les plus grosses sautent d'abord.
+MAX_OLD_BYTES = 2000
 
 
 class RouteError(Exception):
@@ -244,6 +246,8 @@ class Router:
                     app.make(middleware).handle(req, lambda r: run(i + 1, r), *params)
                 )
 
+            if route.json:
+                request.environ["flask_artisan.route_json"] = True  # lu par Authenticate
             return run(0, request._get_current_object())
 
         return view
@@ -253,14 +257,23 @@ def _redirect_back(req, errors: dict):
     """Erreurs et saisies flashées pour la requête suivante, retour à la page précédente."""
     data = {**req.args.to_dict(), **req.form.to_dict()}
     session["_flash_errors"] = errors
-    session["_flash_old"] = {
-        k: v
-        for k, v in data.items()
-        if k not in DONT_FLASH and isinstance(v, str) and len(v) <= MAX_OLD_LENGTH
-    }
+    candidates = sorted(
+        (
+            (len(json.dumps(k)) + len(json.dumps(v)), k, v)
+            for k, v in data.items()
+            if k not in DONT_FLASH
+        ),
+    )
+    old, total = {}, 0
+    for size, key, value in candidates:
+        total += size
+        if total > MAX_OLD_BYTES:
+            break
+        old[key] = value
+    session["_flash_old"] = old
     referrer = req.referrer or ""
     # Même site seulement : jamais de redirection ouverte.
-    return redirect(referrer if referrer.startswith(req.host_url) else "/", 302)
+    return redirect(referrer if referrer.startswith(req.host_url) else req.script_root + "/", 302)
 
 
 def _jsonable(app, rv: Any) -> Any:
