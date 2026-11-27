@@ -1,4 +1,4 @@
-from flask_artisan import HttpKernel, VerifyCsrfToken
+from flask_artisan import HttpKernel, ValidateSignature, VerifyCsrfToken
 from flask_artisan.auth import Authenticate
 from flask_artisan.rate_limiting import ThrottleRequests
 
@@ -11,6 +11,7 @@ class Kernel(HttpKernel):
     middleware = {
         "auth": Authenticate,
         "throttle": ThrottleRequests,  # "throttle:60,1" : 60 requêtes par minute
+        "signed": ValidateSignature,  # URL produite par signed_url(...), sinon 403
     }
 
     # Appliqués automatiquement à routes/web.py et routes/api.py.

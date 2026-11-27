@@ -1,0 +1,69 @@
+import pytest
+
+from flask_artisan import Route, ValidateSignature, signed_url, signing
+
+
+@pytest.fixture
+def app(routed_app):
+    def routes():
+        Route.get("/files/<int:id>", lambda id: "ok").name("files.show").middleware(
+            ValidateSignature
+        )
+
+    return routed_app(routes)
+
+
+@pytest.fixture
+def client(app):
+    return app.test_client()
+
+
+def sign(app, **kw):
+    with app.test_request_context():
+        return signed_url("files.show", **kw)
+
+
+def test_signed_url_is_accepted(app, client):
+    response = client.get(sign(app, id=3)).assert_ok()
+    assert response.get_data(as_text=True) == "ok"
+
+
+def test_signed_url_with_expiry(app, client, monkeypatch):
+    url = sign(app, id=3, expires=60)
+    assert "expires=" in url
+    client.get(url).assert_ok()
+    now = signing._now()
+    monkeypatch.setattr(signing, "_now", lambda: now + 61)
+    response = client.get(url)
+    assert response.status_code == 403
+    assert response.get_json() == {"message": "Invalid signature."}
+
+
+def test_tampered_urls_are_rejected(app, client):
+    url = sign(app, id=3, expires=60)
+    path, query = url.split("?")
+    params = query.split("&")
+    expires = next(p for p in params if p.startswith("expires="))
+    signature = next(p for p in params if p.startswith("signature="))
+    later = f"expires={int(expires.split('=')[1]) + 1000}"
+    for bad in (
+        url.replace("/files/3", "/files/4"),
+        url.replace(expires, later),
+        url + "&signature=x",
+        f"{path}?{expires}",
+        f"{path}?{expires}&a=1&{signature}",
+        f"{path}?expires=abc&{signature}",
+    ):
+        assert client.get(bad).status_code == 403, bad
+
+
+def test_external_signed_url(app, client):
+    url = sign(app, id=3, _external=True)
+    assert url.startswith("http://localhost/")
+    client.get(url.removeprefix("http://localhost")).assert_ok()
+
+
+def test_signature_depends_on_app_key(app, client):
+    url = sign(app, id=3)
+    app.config["SECRET_KEY"] = "another-key"
+    assert client.get(url).status_code == 403
