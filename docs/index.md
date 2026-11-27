@@ -25,20 +25,22 @@ Le projet généré :
 
 ```
 blog/
-├── app/http/controllers/  # controllers
-├── app/http/kernel.py    # middlewares : globaux, alias, groupes web et api
-├── app/providers/        # AppServiceProvider, RouteServiceProvider
-├── routes/web.py         # routes web
-├── routes/api.py         # routes préfixées par /api
-├── bootstrap/app.py      # crée l'Application
-├── app/models/            # modèles (User fourni)
-├── config/app.py         # nom, environnement, debug, clé, providers
-├── config/database.py    # connexions sqlite, mysql, mariadb, pgsql
-├── database/migrations/  # migrations générées
-├── config/flask.py       # clés copiées dans app.config (extensions Flask)
-├── tests/
-├── wsgi.py               # détecté par `flask run`
-└── .env                  # APP_KEY générée automatiquement
+├── app/http/controllers/  # controllers (connexion web et API fournies)
+├── app/http/requests/     # Form Requests
+├── app/http/kernel.py     # middlewares : globaux, alias, groupes web et api
+├── app/models/            # modèles (User fourni, Notifiable)
+├── app/notifications/     # notifications (flask make:notification)
+├── app/providers/         # AppServiceProvider, EventServiceProvider, RouteServiceProvider
+├── bootstrap/app.py       # crée l'Application
+├── config/                # app, auth, cache, database, filesystems, flask, mail, queue
+├── database/migrations/   # migrations générées
+├── resources/views/       # templates Jinja (layout, connexion, e-mails)
+├── routes/web.py          # routes web (CSRF, sessions)
+├── routes/api.py          # routes préfixées par /api, toujours en JSON
+├── routes/console.py      # tâches planifiées
+├── tests/                 # conftest (SQLite en mémoire) et exemples
+├── wsgi.py                # détecté par `flask run`
+└── .env                   # APP_KEY générée automatiquement
 ```
 
 ## Feuille de route v0.1 (publiée)
@@ -51,9 +53,14 @@ blog/
 
 Après la v0.1 :
 
-- ✅ Validation (`FormRequest`, règles façon Laravel, réponses 422 JSON)
+- ✅ Validation (`FormRequest`, règles façon Laravel, 422 JSON ou redirection avec les erreurs)
 - ✅ Événements (`Event.dispatch`, écouteurs, `Event.fake()`)
 - ✅ Mail (mailables, transports `smtp` / `log` / `array`, `Mail.fake()`)
 - ✅ Queues (jobs sur RQ, `flask queue:work`, échecs, `Mail.queue`, écouteurs `ShouldQueue`, `Queue.fake()`)
 - ✅ Cache (`Cache.get/put/remember/increment`, stores `file`, `redis`, `array`)
 - ✅ Limitation de débit et verrous (`throttle`, `RateLimiter`, `Cache.lock`, `TRUSTED_PROXIES`)
+- ✅ Tâches planifiées (`routes/console.py`, `flask schedule:run`)
+- ✅ Vues HTML et formulaires (`errors`, `old()`, CSRF, page de connexion)
+- ✅ Tests HTTP (assertions chaînables, `acting_as`)
+- ✅ Stockage de fichiers (façade `Storage`, disques local et S3, uploads)
+- ✅ Notifications (canaux `mail` et `database`, `Notifiable`, `Notification.fake()`)
