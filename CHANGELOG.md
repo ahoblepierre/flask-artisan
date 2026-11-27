@@ -6,12 +6,14 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ### Modifié
 
+- Toute app déclare la route `GET /storage/<chemin>` (`storage.public`) du disque public, sauf avec `"serve": False` dans `config/filesystems.py` (#49).
 - Un échec de validation sur une requête HTML hors API (formulaire, sans en-tête `Accept` JSON) redirige en arrière au lieu de renvoyer le 422 JSON ; envoyez `Accept: application/json` ou déclarez la route dans `routes/api.py` pour garder le JSON (#19).
 - `expects_json` reconnaît aussi `X-Requested-With: XMLHttpRequest` ; le middleware `auth` répond 401 JSON sur une route de `routes/api.py` au lieu de rediriger vers `login` (#19).
 - Une `AuthorizationError` (403) sur une requête HTML hors API rend la page 403 HTML au lieu du JSON (#19).
 
 ### Ajouté
 
+- **Stockage de fichiers** : façade `Storage` (`put`, `get`, `exists`, `delete`, `files`, `url`, `put_file`, `download`…), disques `local` et `s3` (extra `[s3]`, compatible MinIO et R2), `config/filesystems.py` (`FILESYSTEM_DISK`), disque `public` servi par `/storage/<chemin>` (`nosniff`, types non sûrs en pièce jointe, mêmes en-têtes sur S3), `Storage.fake()` ; règles de validation `file`, `image`, `mimes` et tailles en kilo-octets ; la `FormRequest` lit `request.files` (#49).
 - **Vues HTML** : une erreur de validation sur un formulaire HTML redirige vers la page précédente (même site) avec `errors` et `old()` dans les templates (saisies bornées à environ 2 Ko, sans mots de passe) ; les routes de `routes/api.py` restent toujours en JSON ; `csrf_field()`, `csrf_token()` et le middleware `VerifyCsrfToken` (419) ; le squelette a un layout, une page de connexion (`/login`, `/logout`, `/dashboard`), le CSRF dans le groupe `web` et `SESSION_COOKIE_SAMESITE = "Lax"` (#19).
 - **Tests HTTP** : `app.test_client()` renvoie un client dont les réponses ont des assertions chaînables (`assert_status`, `assert_ok`, `assert_json`, `assert_json_path`, `assert_json_validation_errors`, `assert_header`, `assert_redirect`) et `client.acting_as(user, guard=None)` (session écrite ou vrai token) ; le squelette a un `tests/conftest.py` (base SQLite en mémoire, cache `array`) et un exemple (#46).
 

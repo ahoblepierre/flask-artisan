@@ -331,3 +331,24 @@ def test_generated_project_schedule(project):
     result = run(project, "-m", "flask", "schedule:run")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "Aucune tâche planifiée à exécuter." in result.stdout
+
+
+STORAGE_FLOW = """
+from wsgi import app
+from flask_artisan import Storage
+with app.app_context():
+    Storage.disk("public").put("x.txt", "hi")
+    assert Storage.disk().root.as_posix().endswith("storage/app/private")
+r = app.test_client().get("/storage/x.txt")
+assert r.status_code == 200 and r.data == b"hi", (r.status_code, r.data)
+assert r.headers["X-Content-Type-Options"] == "nosniff"
+print("OK")
+"""
+
+
+def test_generated_project_storage(project):
+    assert (project / "config" / "filesystems.py").exists()
+    assert "FILESYSTEM_DISK=local" in (project / ".env").read_text().splitlines()
+    out = run(project, "-c", STORAGE_FLOW)
+    assert out.stdout.strip() == "OK", out.stdout + out.stderr
+    assert (project / "storage" / "app" / "public" / "x.txt").read_text() == "hi"
