@@ -70,3 +70,39 @@ def test_custom_message_placeholders():
 @pytest.mark.parametrize("rules", ["numeric", "integer|max:10", "numeric|min:1"])
 def test_huge_integer_is_an_error_not_a_crash(rules):
     assert errors({"n": 10**400}, {"n": rules}) != {}
+
+
+@pytest.mark.parametrize(
+    ("value", "ok"),
+    [("123", True), ("-4", True), ("١٢٣", False), ("１２", False), (" 12", False), ("+1", False)],
+)
+def test_integer_ascii_only(value, ok):
+    assert (errors({"n": value}, {"n": "integer"}) == {}) is ok
+
+
+@pytest.mark.parametrize(
+    ("value", "ok"),
+    [
+        ("1.5", True),
+        ("-0", True),
+        ("1e3", True),
+        ("1E-3", True),
+        ("5", True),
+        (2.5, True),
+        ("١٢٣", False),
+        (" 12 ", False),
+        ("1_000", False),
+        (".5", False),
+        ("5.", False),
+        ("nan", False),
+        ("inf", False),
+        ("1e999", False),
+    ],
+)
+def test_numeric_ascii_only(value, ok):
+    assert (errors({"n": value}, {"n": "numeric"}) == {}) is ok
+
+
+def test_long_integer_string_is_numeric():
+    assert errors({"n": "1" * 5000}, {"n": "integer"}) == {}
+    assert errors({"n": "1" * 5000}, {"n": "numeric"}) == {}

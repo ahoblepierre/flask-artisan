@@ -72,10 +72,15 @@ def _required_with(value, params, field, v):
     return True
 
 
+# Chiffres ASCII seulement : \d (Unicode) et float() accepteraient « ١٢٣ », « 1_000 », « 12 ».
+INTEGER = re.compile(r"-?[0-9]+", re.ASCII)
+NUMERIC = re.compile(r"-?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?", re.ASCII)
+
+
 def _integer(value, params, field, v):
     if isinstance(value, int):
         return not _is_bool(value)
-    return isinstance(value, str) and re.fullmatch(r"-?\d+", value) is not None
+    return isinstance(value, str) and INTEGER.fullmatch(value) is not None
 
 
 def _numeric(value, params, field, v):
@@ -87,10 +92,11 @@ def _numeric(value, params, field, v):
         except OverflowError:  # entier JSON géant
             return False
     if isinstance(value, str):
-        try:
-            return math.isfinite(float(value))
-        except ValueError:
+        # isfinite : « 1e999 » a la bonne forme mais déborde.
+        if NUMERIC.fullmatch(value) is None:
             return False
+        # Un entier est toujours un nombre (float("1" * 5000) déborde) ; « 1e999 » non.
+        return INTEGER.fullmatch(value) is not None or math.isfinite(float(value))
     return False
 
 
@@ -342,6 +348,14 @@ def _check_params(name: str, params: list[str], field: str) -> None:
         except ValueError:
             raise ValueError(
                 f"La règle '{name}' du champ '{field}' attend des nombres : {params}."
+            ) from None
+    if name == "regex":
+        try:
+            re.compile(params[0])
+        except re.error as exc:
+            # Dès la construction : sinon une erreur 500 au premier champ envoyé, en production.
+            raise ValueError(
+                f"La règle 'regex' du champ '{field}' a un motif invalide : {exc}."
             ) from None
     if name in ("unique", "exists"):
         names = [params[0], _db_column(params, field)]

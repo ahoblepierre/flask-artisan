@@ -110,3 +110,8 @@ def test_validation_error_singular():
     with pytest.raises(ValidationError) as info:
         validate({}, {"a": "required", "b": "required"})
     assert info.value.get_response().get_json()["message"].endswith("(and 1 more error)")
+
+
+def test_invalid_regex_at_construction():
+    with pytest.raises(ValueError, match=r"regex.*code|code.*regex"):
+        Validator({}, {"code": "regex:[a-"})

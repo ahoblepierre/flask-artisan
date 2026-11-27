@@ -27,6 +27,8 @@ class PostController:
         return Post.create(**request.validated()), 201   # seulement les champs avec une règle
 ```
 
+Le paramètre annoté par la `FormRequest` ne doit pas avoir de valeur par défaut (`request: StorePostRequest = None`) : le conteneur prendrait la valeur par défaut et la validation serait sautée, donc la route est refusée (`RouteError`) à l'enregistrement. Seule exception : une FormRequest liée explicitement dans le conteneur (`app.bind(...)`) et annotée par sa classe seule (pas `| None`), que le conteneur construit avant le défaut.
+
 Données lues : paramètres de l'URL fusionnés avec le corps (JSON objet, sinon formulaire). En cas d'échec, réponse **422** :
 
 ```json
@@ -49,4 +51,4 @@ Hors controller : `validate(data, rules)` rend les données validées ou lève `
 
 Une `FormRequest` lit aussi les fichiers envoyés (`request.files`, le premier par champ) ; un champ fichier sans fichier choisi compte comme vide.
 
-Un champ absent ou vide n'est soumis qu'aux règles de présence ; `None` échoue toutes les autres règles sauf avec `nullable`. Pour ignorer la ligne courante lors d'une mise à jour : `f"unique:users,email,{request.view_args['id']}"`. Les valeurs ne sont pas converties (`"42"` reste une chaîne).
+Un champ absent ou vide n'est soumis qu'aux règles de présence ; `None` échoue toutes les autres règles sauf avec `nullable`. Pour ignorer la ligne courante lors d'une mise à jour : `f"unique:users,email,{request.view_args['id']}"`. Les valeurs ne sont pas converties (`"42"` reste une chaîne). `integer` et `numeric` n'acceptent que des chiffres ASCII, sans espaces ni `_` (`"١٢٣"`, `" 12 "` et `"1_000"` sont refusés) ; `numeric` accepte `-1.5` et `1e3`, pas `.5` ni `5.`. Un motif `regex` invalide lève `ValueError` dès la construction du `Validator`.

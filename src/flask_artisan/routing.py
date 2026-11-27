@@ -1,7 +1,10 @@
 import importlib.util
 import inspect
 import json
+import logging
 import sys
+import types
+import typing
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
@@ -11,13 +14,16 @@ from flask import redirect, request, session
 from werkzeug.exceptions import Forbidden
 
 from flask_artisan.middleware import HttpKernel, expects_json, resolve
-from flask_artisan.validation import AuthorizationError, ValidationError
+from flask_artisan.validation import AuthorizationError, FormRequest, ValidationError
 
 # Jamais gardés en session pour old() (comme dontFlash de Laravel).
 DONT_FLASH = {"password", "password_confirmation", "current_password", "_token"}
 # Budget des saisies flashées, en JSON échappé (\uXXXX) comme dans le cookie de session :
 # au-delà d'environ 4 Ko, le navigateur ignorerait le cookie. Les plus grosses sautent d'abord.
 MAX_OLD_BYTES = 2000
+
+
+logger = logging.getLogger(__name__)
 
 
 class RouteError(Exception):
@@ -182,6 +188,7 @@ class Router:
                     f"Middleware inconnu '{exc.args[0]}' sur la route {route.rule} : "
                     "déclarez-le dans `middleware` ou `groups` du kernel."
                 ) from None
+            _check_form_request_defaults(self._app, route)
             view = self._view(route, stack)
             self._app.add_url_rule(route.rule, endpoint, view, methods=route.methods)
             self.registered.append((route, endpoint, stack))
@@ -251,6 +258,36 @@ class Router:
             return run(0, request._get_current_object())
 
         return view
+
+
+def _check_form_request_defaults(app, route: PendingRoute) -> None:
+    """Une FormRequest avec valeur par défaut : le conteneur prendrait le défaut, sans valider."""
+    cls, target = route.handler
+    fn = getattr(cls, target) if cls else target
+    try:
+        hints = typing.get_type_hints(fn)
+    except Exception as exc:  # noqa: BLE001 (le conteneur échouera à l'appel : on prévient tôt)
+        logger.warning(
+            "Route %s : annotations illisibles (%s) ; l'appel échouera, et une FormRequest "
+            "avec valeur par défaut n'a pas pu être vérifiée.",
+            route.rule,
+            exc,
+        )
+        return
+    for name, param in inspect.signature(fn).parameters.items():
+        hint = hints.get(name)
+        # StoreRequest | None, Optional[...] (et, en 3.10, tout `= None` : get_type_hints l'ajoute).
+        union = typing.get_origin(hint) in (typing.Union, types.UnionType)
+        candidates = typing.get_args(hint) if union else (hint,)
+        if not union and app.bound(hint):
+            continue  # liée explicitement : le conteneur la construit (et la valide) avant le défaut
+        if param.default is not param.empty and any(
+            isinstance(c, type) and issubclass(c, FormRequest) for c in candidates
+        ):
+            raise RouteError(
+                f"Route {route.rule} : le paramètre '{name}' (FormRequest) ne doit pas avoir "
+                "de valeur par défaut : le conteneur la prendrait et la validation serait sautée."
+            )
 
 
 def _redirect_back(req, errors: dict):

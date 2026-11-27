@@ -1,3 +1,7 @@
+import logging
+import sys
+import typing
+
 import pytest
 from flask import request as flask_request
 
@@ -120,3 +124,65 @@ def test_middleware_sees_validation_responses(routed_app):
         r = client.post(url, json={})
         assert r.status_code == status
         assert r.headers.get("X-Stamp") == "1"
+
+
+def store_with_default(request: StoreRequest = None):
+    return {}
+
+
+class DefaultCtl:
+    def store(self, request: StoreRequest = None):
+        return {}
+
+
+def store_optional(request: StoreRequest | None = None):
+    return {}
+
+
+def store_typing_optional(request: typing.Optional[StoreRequest] = None):  # noqa: UP045
+    return {}
+
+
+@pytest.mark.parametrize(
+    "handler", [store_with_default, DefaultCtl.store, store_optional, store_typing_optional]
+)
+def test_form_request_default_refused(routed_app, handler):
+    from flask_artisan.routing import RouteError
+
+    with pytest.raises(RouteError, match=r"request.*valeur par défaut"):
+        routed_app(lambda: Route.post("/p", handler))
+
+
+def unreadable(request: "Inconnu" = None):  # noqa: F821
+    return {"ok": True}
+
+
+def test_form_request_default_with_string_annotations(routed_app, caplog):
+    # Annotations illisibles : la route est enregistrée, et un avertissement la nomme.
+    with caplog.at_level(logging.WARNING):
+        app = routed_app(lambda: Route.post("/p", unreadable))
+    assert any(rule.rule == "/p" for rule in app.url_map.iter_rules())
+    assert "/p" in caplog.text and "Inconnu" in caplog.text
+
+
+def test_bound_form_request_with_default_allowed(make_project):
+    from flask_artisan import Application
+    from flask_artisan.providers import ServiceProvider
+    from flask_artisan.routing import RouteError
+
+    class Bind(ServiceProvider):
+        def register(self):
+            self.app.bind(StoreRequest, StoreRequest)
+
+        def boot(self):
+            Route.post("/p", store_with_default)
+
+    app = Application(make_project())
+    if sys.version_info < (3, 11):
+        # 3.10 : get_type_hints fait de « = None » un Optional ; le conteneur ne voit plus la
+        # liaison et prendrait le défaut, donc la route reste refusée.
+        with pytest.raises(RouteError):
+            app.register(Bind)
+        return
+    app.register(Bind)
+    assert any(rule.rule == "/p" for rule in app.url_map.iter_rules())
