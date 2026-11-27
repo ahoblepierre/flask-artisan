@@ -4,6 +4,15 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ## [Non publié]
 
+### Ajouté
+
+- `flask auth:install` : inscription, mot de passe oublié et vérification de l'e-mail copiés dans le projet (routes, controllers, FormRequests, vues, tests). Ne modifie jamais un fichier existant (#59).
+- `Password.send_reset_link` / `Password.reset` (`flask_artisan.auth.passwords`, table `password_reset_tokens`) ; une réinitialisation révoque aussi les tokens d'API (#59).
+- Mixin `MustVerifyEmail` (colonne `email_verified_at`) et middleware `verified` (`EnsureEmailIsVerified`) (#59).
+- URLs signées : `signed_url(...)` et middleware `signed` (`ValidateSignature`) (#59).
+- Notifications `ResetPassword` et `VerifyEmail`, aux templates surchargeables dans `resources/views/flask_artisan/emails/` (#59).
+- `RouteServiceProvider` charge `routes/auth.py` dans le groupe `web` s'il existe (#59).
+
 ## [0.9.0] - 2026-11-27
 
 ### Modifié
