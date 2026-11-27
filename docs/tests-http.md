@@ -25,6 +25,8 @@ Chaque assertion renvoie la réponse, ce qui permet de les enchaîner. En cas d'
 | `assert_header(name, value=None)` | l'en-tête est présent et, si `value` est donné, a cette valeur |
 | `assert_redirect(location=None)` | le statut est une redirection (301, 302, 303, 307, 308) et, si `location` est donné, l'en-tête `Location` vaut `location` (tel que la vue l'a produit, `/login` par exemple) |
 
+Les comparaisons de `assert_json` et `assert_json_path` distinguent les booléens des nombres : `{"active": 1}` ne correspond pas à `true`. `1` et `1.0` restent égaux, comme en JSON.
+
 Pour comparer tout le JSON, utilisez `assert response.json == {...}`.
 
 ## `acting_as`
@@ -36,14 +38,20 @@ client.acting_as(user, "api")   # guard token, pour les routes en auth:api
 
 `acting_as` passe par la vraie [authentification](authentification.md) :
 
-- avec un guard session, l'utilisateur est écrit dans la session du client, comme le ferait `Auth.login(user)` ;
+- avec un guard session, la session du client est vidée puis l'utilisateur y est écrit, comme le fait `Auth.login(user)` ;
 - avec un guard token, un vrai token nommé `"test"` est créé en base et envoyé dans l'en-tête `Authorization: Bearer …`. `Auth.user().current_access_token()` fonctionne donc comme en production (un `logout` qui supprime le token, par exemple).
 
 Comme dans Laravel, sans guard, c'est le guard par défaut (`web` dans le squelette) : `client.acting_as(user).get("/api/user")` renvoie 401. Pour l'API, précisez `"api"`.
 
-L'utilisateur reste authentifié pour toutes les requêtes suivantes de ce client. Un nouvel appel à `acting_as` le remplace. Pour redevenir invité, prenez un nouveau client avec `app.test_client()`.
+L'utilisateur reste authentifié pour toutes les requêtes suivantes de ce client. Un nouvel appel à `acting_as` le remplace, quel que soit le guard : après `acting_as(a, "api")` puis `acting_as(b)`, l'en-tête du token de `a` n'est plus envoyé. Pour redevenir invité, prenez un nouveau client avec `app.test_client()`.
 
 Un guard inconnu lève `AuthenticationError`.
+
+`acting_as` peut s'appeler dans un `with app.app_context():` ouvert par le test : il réutilise ce contexte, et les modèles déjà chargés restent attachés à la session de base.
+
+## Un client personnalisé
+
+Le client est choisi par `app.test_client_class`, posé sur l'instance par `Application`. Pour le remplacer, sous-classez `flask_artisan.testing.TestClient` et affectez-le après la création de l'app (`app.test_client_class = MonClient`), pas en attribut d'une sous-classe d'`Application`.
 
 ## Les tests du squelette
 

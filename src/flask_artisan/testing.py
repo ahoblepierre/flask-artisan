@@ -15,7 +15,18 @@ def _contains(actual, expected) -> bool:
         return isinstance(actual, dict) and all(
             key in actual and _contains(actual[key], value) for key, value in expected.items()
         )
-    return actual == expected
+    return _same(actual, expected)
+
+
+def _same(a, b) -> bool:
+    """Égalité, sauf qu'un booléen n'égale jamais un nombre (`1 == True` en Python)."""
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(map(_same, a, b))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same(a[k], b[k]) for k in a)
+    if isinstance(a, bool) or isinstance(b, bool):
+        return a is b
+    return a == b
 
 
 class TestResponse(BaseTestResponse):
@@ -23,7 +34,7 @@ class TestResponse(BaseTestResponse):
 
     def _fail(self, message: str):
         raise AssertionError(
-            f"{message}\nCorps ({self.status_code}) : {self.get_data(as_text=True)[:500]}"
+            f"{message}\nCorps ({self.status_code}) : {self.get_data()[:500].decode(errors='replace')}"
         )
 
     def _json(self):
@@ -49,19 +60,22 @@ class TestResponse(BaseTestResponse):
     def assert_json_path(self, path: str, value):
         current = self._json()
         for segment in path.split("."):
-            if isinstance(current, list) and segment.isdigit() and int(segment) < len(current):
+            if isinstance(current, list) and segment.isdecimal() and int(segment) < len(current):
                 current = current[int(segment)]
             elif isinstance(current, dict) and segment in current:
                 current = current[segment]
             else:
                 self._fail(f"Chemin JSON '{path}' : segment '{segment}' absent.")
-        if current != value:
+        if not _same(current, value):
             self._fail(f"'{path}' vaut {current!r}, attendu {value!r}.")
         return self
 
     def assert_json_validation_errors(self, fields):
         self.assert_status(422)
-        errors = self._json().get("errors") or {}
+        data = self._json()
+        errors = data.get("errors") if isinstance(data, dict) else None
+        if not isinstance(errors, dict):
+            self._fail(f"Pas de clé 'errors' (dict) dans le JSON ; champs attendus : {fields}.")
         missing = [f for f in ([fields] if isinstance(fields, str) else fields) if f not in errors]
         if missing:
             self._fail(f"Pas d'erreur de validation pour {missing} ; erreurs : {list(errors)}.")
@@ -93,7 +107,10 @@ class TestClient(FlaskClient):
         super().__init__(application, wrapper, *args, **kwargs)
 
     def acting_as(self, user, guard: str | None = None):
-        """Authentifie les requêtes suivantes par le vrai guard (session écrite, ou vrai token)."""
+        """Authentifie les requêtes suivantes par le vrai guard (session écrite, ou vrai token).
+
+        Remplace l'utilisateur d'un `acting_as` précédent, quel que soit son guard.
+        """
         # Import tardif : flask_artisan.auth déclare la table des tokens.
         from flask_artisan.auth.manager import (
             SESSION_HASH_KEY,
@@ -110,8 +127,13 @@ class TestClient(FlaskClient):
             if isinstance(resolved, TokenGuard):
                 token = user.create_token("test")
                 self.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+                with self.session_transaction() as session:
+                    session.pop(SESSION_KEY, None)
+                    session.pop(SESSION_HASH_KEY, None)
                 return self
+        self.environ_base.pop("HTTP_AUTHORIZATION", None)
         with self.session_transaction() as session:
+            session.clear()  # comme SessionGuard.login
             session[SESSION_KEY] = user.id
             session[SESSION_HASH_KEY] = _fingerprint(user)
         return self

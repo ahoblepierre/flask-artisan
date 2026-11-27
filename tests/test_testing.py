@@ -5,6 +5,7 @@ from flask import redirect
 from flask_artisan import Application
 from flask_artisan.testing import TestClient, TestResponse
 
+JSON = {"Content-Type": "application/json"}
 BODY = {"user": {"id": 1, "email": "a@x"}, "tags": ["a", "b"]}
 
 
@@ -24,6 +25,9 @@ def app(make_project):
     )
     app.add_url_rule("/header", "header", lambda: ("", 200, {"X-Thing": "yes"}))
     app.add_url_rule("/go", "go", lambda: redirect("/login"))
+    app.add_url_rule("/binary", "binary", lambda: (b"\xff\xfe\x00", 200))
+    app.add_url_rule("/list-422", "list_422", lambda: (flask.json.dumps([1]), 422, JSON))
+    app.add_url_rule("/flags", "flags", lambda: {"active": True, "count": 1})
     return app
 
 
@@ -117,3 +121,28 @@ def test_assert_redirect(client):
         client.get("/go").assert_redirect("/home")
     with pytest.raises(AssertionError):
         client.get("/json").assert_redirect()
+
+
+def test_failure_on_binary_body_is_assertion(client):
+    with pytest.raises(AssertionError, match="201"):
+        client.get("/binary").assert_status(201)
+
+
+def test_validation_errors_on_non_dict_json(client):
+    with pytest.raises(AssertionError, match="email"):
+        client.get("/list-422").assert_json_validation_errors(["email"])
+
+
+def test_assert_json_path_unicode_digit(client):
+    with pytest.raises(AssertionError, match="²"):
+        client.get("/json").assert_json_path("tags.²", "a")
+
+
+def test_bool_and_int_are_distinct(client):
+    response = client.get("/flags")
+    response.assert_json({"active": True, "count": 1}).assert_json_path("count", 1)
+    for data in ({"active": 1}, {"count": True}):
+        with pytest.raises(AssertionError):
+            response.assert_json(data)
+    with pytest.raises(AssertionError):
+        response.assert_json_path("active", 1)

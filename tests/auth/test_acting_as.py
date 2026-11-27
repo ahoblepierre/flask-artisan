@@ -80,3 +80,22 @@ def test_acting_as_keeps_callers_db_session(setup):
             client.acting_as(member, guard)
             assert DB.session is session
             assert not inspect(member).detached
+
+
+def test_acting_as_switching_guard_drops_previous_user(setup):
+    client, a, b = setup
+    client.acting_as(a, "api").acting_as(b)
+    client.get("/api/me").assert_status(401)
+    client.get("/me").assert_json({"email": "b@x"})
+    client.acting_as(a).acting_as(b, "api")
+    client.get("/me").assert_status(401)
+    client.get("/api/me").assert_json({"email": "b@x"})
+
+
+def test_acting_as_session_starts_fresh_like_login(setup):
+    client, a, _ = setup
+    with client.session_transaction() as session:
+        session["cart"] = [1]
+    client.acting_as(a)
+    with client.session_transaction() as session:
+        assert "cart" not in session
