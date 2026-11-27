@@ -1,13 +1,18 @@
 """Tâches planifiées : `Schedule` (façade `Schedule`), `flask schedule:run|work|list`."""
 
+import hashlib
 import importlib.util
+import inspect
 import re
 import shlex
-from datetime import datetime
+import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import click
+from flask import current_app
+from flask.cli import with_appcontext
 
 # (minimum, maximum) de chaque champ : minute, heure, jour du mois, mois, jour de semaine.
 _FIELDS = ((0, 59), (0, 23), (1, 31), (1, 12), (0, 7))
@@ -210,6 +215,10 @@ class Event:
             return f"{cls.__module__}.{cls.__qualname__}"
         return getattr(self.target, "__qualname__", repr(self.target))
 
+    def lock_id(self, default_tz: str) -> str:
+        key = self.expression + (self.tz or default_tz) + self.description
+        return hashlib.sha1(key.encode()).hexdigest()
+
     def is_due(self, now: datetime, default_tz: str) -> bool:
         local = now.astimezone(zone(self.tz or default_tz, "timezone"))
         return self._cron.matches(local.replace(second=0, microsecond=0, tzinfo=None))
@@ -281,3 +290,84 @@ class Schedule:
             spec.loader.exec_module(module)
         except Exception as exc:
             raise click.ClickException(f"Erreur dans {path} : {exc}") from exc
+
+    def run_due(self, now: datetime, echo) -> bool:
+        """Exécute les tâches dues à `now`, l'une après l'autre ; False si une a échoué."""
+        due = self.due_events(now)
+        if not due:
+            echo("Aucune tâche planifiée à exécuter.")
+            return True
+        default = self.timezone()
+        ok = True
+        for event in due:
+            ok = self._run(event, now, default, echo) and ok
+        return ok
+
+    def _run(self, event: Event, now: datetime, default_tz: str, echo) -> bool:
+        cache = self._app.make("cache")
+        ident = event.lock_id(default_tz)
+        if event.one_server:
+            minute = now.astimezone(timezone.utc).strftime("%Y%m%d%H%M")
+            # Jamais libéré : le premier serveur qui le prend exécute la tâche pour cette minute.
+            if not cache.lock(f"schedule:{ident}:{minute}", 3600).get():
+                echo(f"Sautée (autre serveur) : {event.description}")
+                return True
+        lock = None
+        if event.overlap_minutes is not None:
+            lock = cache.lock(f"schedule:{ident}", event.overlap_minutes * 60)
+            if not lock.get():
+                echo(f"Sautée (déjà en cours) : {event.description}")
+                return True
+        echo(f"Exécution : {event.description}")
+        try:
+            self._execute(event)
+        except Exception:  # noqa: BLE001 — une tâche en échec ne doit pas arrêter les suivantes
+            click.echo(traceback.format_exc(), err=True)
+            return False
+        finally:
+            if lock is not None:
+                lock.release()
+        echo("OK")
+        return True
+
+    def _execute(self, event: Event) -> None:
+        if event.kind == "command":
+            try:
+                code = self._app.cli.main(
+                    args=list(event.args), prog_name="flask", standalone_mode=False
+                )
+            except SystemExit as exc:
+                code = exc.code
+            except click.ClickException as exc:
+                raise RuntimeError(f"{event.description} : {exc.format_message()}") from None
+            if isinstance(code, int) and code != 0:
+                raise RuntimeError(f"{event.description} : code de sortie {code}")
+        elif event.kind == "job":
+            job = event.target.on_queue(event.queue) if event.queue else event.target
+            queue = self._app.make("queue")
+            (queue.connection(event.connection) if event.connection else queue).push(job)
+        else:
+            # Positionnels nommés d'après la signature : le conteneur injecte le reste.
+            named = inspect.signature(event.target).bind_partial(*event.args).arguments
+            self._app.call(event.target, **named, **event.kwargs)
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _schedule():
+    schedule = current_app.make("schedule")
+    schedule.load(current_app.base_path("routes/console.py"))
+    return schedule
+
+
+@click.command("schedule:run")
+@with_appcontext
+def schedule_run():
+    """Exécute les tâches planifiées dues à cette minute (à lancer par cron chaque minute)."""
+    if not _schedule().run_due(_now(), click.echo):
+        raise SystemExit(1)
+
+
+COMMANDS = [schedule_run]
