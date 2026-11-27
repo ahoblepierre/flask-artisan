@@ -12,6 +12,7 @@ from flask_artisan.console import COMMANDS, ArtisanGroup
 from flask_artisan.container import Container
 from flask_artisan.env import load_env_file
 from flask_artisan.events import Dispatcher
+from flask_artisan.filesystem import FilesystemManager
 from flask_artisan.mail import Mailer
 from flask_artisan.providers import ServiceProvider
 from flask_artisan.queue import QueueManager
@@ -71,6 +72,9 @@ class Application(Flask, Container):
         cache = CacheManager(self)
         self.instance("cache", cache)
         self.instance(CacheManager, cache)
+        filesystem = FilesystemManager(self)
+        self.instance("filesystem", filesystem)
+        self.instance(FilesystemManager, filesystem)
         limiter = RateLimiter(self)
         self.instance("limiter", limiter)
         self.instance(RateLimiter, limiter)

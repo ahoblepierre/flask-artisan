@@ -54,6 +54,10 @@ class Cache(Facade):
     accessor = "cache"
 
 
+class Storage(Facade):
+    accessor = "filesystem"
+
+
 class RateLimiter(Facade):
     accessor = "limiter"
 
