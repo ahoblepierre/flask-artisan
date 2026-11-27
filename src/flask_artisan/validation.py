@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from flask import has_request_context, request
 from sqlalchemy import column, literal, select, table
+from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import HTTPException
 from werkzeug.wrappers import Response
 
@@ -48,6 +49,8 @@ def _empty(value) -> bool:
         return True
     if isinstance(value, str):
         return not value.strip()
+    if isinstance(value, FileStorage):
+        return not value.filename  # champ fichier envoyé sans fichier choisi
     return isinstance(value, (list, dict, tuple)) and not value
 
 
@@ -136,7 +139,46 @@ def _size(value, field, v) -> float | None:
             return None  # la règle de type signale déjà l'erreur
     if isinstance(value, (list, dict)):
         return len(value)
+    if isinstance(value, FileStorage):
+        return math.ceil(_file_bytes(value) / 1024)  # en kilo-octets, comme Laravel
     return len(str(value))
+
+
+def _file_bytes(file: FileStorage) -> int:
+    stream = file.stream
+    position = stream.tell()
+    stream.seek(0, 2)
+    size = stream.tell()
+    stream.seek(position)
+    return size
+
+
+IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "bmp", "webp", "avif"}
+
+
+def _ext(file) -> str:
+    name = file.filename or ""
+    ext = name.rsplit(".", 1)[1].lower() if "." in name else ""
+    return "jpg" if ext == "jpeg" else ext
+
+
+def _is_file(value) -> bool:
+    return isinstance(value, FileStorage) and bool(value.filename)
+
+
+def _image(value, *_):
+    # Extension et type MIME envoyés par le client (pas d'analyse du contenu) ; jamais svg.
+    return (
+        _is_file(value)
+        and _ext(value) in IMAGE_EXTENSIONS
+        and (value.mimetype or "").startswith("image/")
+        and value.mimetype != "image/svg+xml"
+    )
+
+
+def _mimes(value, params, *_):
+    allowed = {"jpg" if p.lower() == "jpeg" else p.lower() for p in params}
+    return _is_file(value) and _ext(value) in allowed
 
 
 def _min(value, params, field, v):
@@ -197,6 +239,9 @@ RULES = {
     "required": _required,
     "required_with": _required_with,
     "string": lambda value, *_: isinstance(value, str),
+    "file": lambda value, *_: _is_file(value),
+    "image": _image,
+    "mimes": _mimes,
     "integer": _integer,
     "numeric": _numeric,
     "boolean": _boolean,
@@ -228,6 +273,7 @@ PARAMS = {
     "not_in": (1, False),
     "same": (1, False),
     "regex": (1, False),
+    "mimes": (1, False),
     "unique": (1, False),
     "exists": (1, False),
 }
@@ -237,16 +283,19 @@ SIZE_MESSAGES = {
         "numeric": "The :attribute field must be at least :min.",
         "string": "The :attribute field must be at least :min characters.",
         "array": "The :attribute field must have at least :min items.",
+        "file": "The :attribute field must be at least :min kilobytes.",
     },
     "max": {
         "numeric": "The :attribute field must not be greater than :max.",
         "string": "The :attribute field must not be greater than :max characters.",
         "array": "The :attribute field must not have more than :max items.",
+        "file": "The :attribute field must not be greater than :max kilobytes.",
     },
     "between": {
         "numeric": "The :attribute field must be between :min and :max.",
         "string": "The :attribute field must be between :min and :max characters.",
         "array": "The :attribute field must have between :min and :max items.",
+        "file": "The :attribute field must be between :min and :max kilobytes.",
     },
 }
 
@@ -257,6 +306,9 @@ MESSAGES = {
     "required": "The :attribute field is required.",
     "required_with": "The :attribute field is required when :values is present.",
     "string": "The :attribute field must be a string.",
+    "file": "The :attribute field must be a file.",
+    "image": "The :attribute field must be an image.",
+    "mimes": "The :attribute field must be a file of type: :values.",
     "integer": "The :attribute field must be an integer.",
     "numeric": "The :attribute field must be a number.",
     "boolean": "The :attribute field must be true or false.",
@@ -366,6 +418,8 @@ class Validator:
                 kind = "numeric"
             else:
                 kind = "array" if isinstance(value, (list, dict)) else "string"
+                if isinstance(value, FileStorage):
+                    kind = "file"
             template = SIZE_MESSAGES[rule][kind]
         template = template or MESSAGES[rule]
         low = params[0] if params else ""
@@ -398,6 +452,7 @@ class FormRequest:
         data = request.args.to_dict()
         body = request.get_json(silent=True)
         data.update(body if isinstance(body, dict) else request.form.to_dict())
+        data.update(request.files.to_dict())  # un seul fichier par champ (le premier)
         self._data = data
         if not self.authorize():
             raise AuthorizationError()
