@@ -6,7 +6,7 @@ Flask-Artisan donne une structure prête à l'emploi aux applications Flask : co
 service providers, configuration par fichiers, façades et helpers. L'application reste un vrai
 objet `Flask` : `flask run`, les extensions Flask et leur documentation fonctionnent tels quels.
 
-> Version 0.9 (alpha) : l'API peut encore changer avant la 1.0. Voir le [changelog](https://github.com/ahoblepierre/flask-artisan/blob/main/CHANGELOG.md).
+> Version 0.10 (alpha) : l'API peut encore changer avant la 1.0. Voir le [changelog](https://github.com/ahoblepierre/flask-artisan/blob/main/CHANGELOG.md).
 
 ## Démarrer un projet
 
@@ -64,3 +64,4 @@ Après la v0.1 :
 - ✅ Tests HTTP (assertions chaînables, `acting_as`)
 - ✅ Stockage de fichiers (façade `Storage`, disques local et S3, uploads)
 - ✅ Notifications (canaux `mail` et `database`, `Notifiable`, `Notification.fake()`)
+- ✅ Kit de démarrage `flask auth:install` (inscription, mot de passe oublié, vérification de l'e-mail, URLs signées)

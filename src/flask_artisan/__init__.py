@@ -25,7 +25,7 @@ from flask_artisan.route_provider import RouteServiceProvider
 from flask_artisan.routing import RouteError, Router
 from flask_artisan.signing import ValidateSignature, signed_url
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 __all__ = [
     "DB",
