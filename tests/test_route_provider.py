@@ -113,3 +113,28 @@ def test_api_provider_marks_json(make_project):
     )
     flags = {route.rule: route.json for route, _, _ in Application(base).make(Router).registered}
     assert flags == {"/": False, "/api/ping": True, "/storage/<path:path>": False}
+
+
+class WebKernel(HttpKernel):
+    middleware = {"header": Header}
+    groups = {"web": ["header"], "api": []}
+
+
+class WebRoutes(RouteServiceProvider):
+    kernel = WebKernel
+
+
+def test_auth_routes_file_is_loaded_with_web_group(make_project):
+    base = make_project(providers="[WebRoutes]", extra="from test_route_provider import WebRoutes")
+    (base / "routes").mkdir()
+    (base / "routes" / "auth.py").write_text(
+        ROUTE_FILE.format('Route.get("/hello", ping).name("hello")')
+    )
+    r = Application(base).test_client().get("/hello")
+    assert r.get_data(as_text=True) == "pong"
+    assert r.headers["X-Group"] == "api"  # le middleware du groupe web
+
+
+def test_missing_auth_routes_file_is_fine(make_project):
+    base = project(make_project, web=ROUTE_FILE.format('Route.get("/", ping)'))
+    Application(base).test_client().get("/").assert_ok()
