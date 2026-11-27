@@ -62,3 +62,9 @@ def test_csrf_field_escapes_and_reuses_token(client):
         token = csrf_token()
         assert csrf_token() == token and len(token) >= 40
         assert f'name="_token" value="{token}"' in str(csrf_field())
+
+
+def test_no_vary_cookie_when_nothing_flashed(client):
+    with client.session_transaction() as session:
+        session["other"] = 1
+    assert "Cookie" not in client.get("/json").headers.get("Vary", "")

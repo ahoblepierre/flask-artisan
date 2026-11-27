@@ -43,10 +43,15 @@ def _flashed() -> dict:
 
 def age_flash() -> None:
     """before_request : données flashées par la requête précédente, retirées de la session."""
-    # Pas de session.pop sans la clé : une requête d'API ne doit pas recevoir de cookie.
-    data = {name: session.pop(key) for key, name in FLASH_KEYS.items() if key in session}
+    store = session._get_current_object()
+    # Pas de pop sans la clé : une requête d'API ne doit pas recevoir de cookie.
+    data = {name: store.pop(key) for key, name in FLASH_KEYS.items() if key in store}
     if data:
         request.environ["flask_artisan.flash"] = data
+    else:
+        # Premier before_request de l'app : rien n'avait lu la session avant nous. Sans ça,
+        # chaque réponse recevrait `Vary: Cookie`, alors que la requête n'a rien lu.
+        store.accessed = False
 
 
 def errors() -> ErrorBag:
