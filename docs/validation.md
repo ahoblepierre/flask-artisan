@@ -42,8 +42,11 @@ Hors controller : `validate(data, rules)` rend les données validées ou lève `
 |---|---|
 | Présence | `required`, `required_with:a,b`, `nullable`, `sometimes` |
 | Types | `string`, `integer`, `numeric`, `boolean`, `array`, `email`, `url`, `date` |
-| Taille | `min:n`, `max:n`, `between:a,b` (valeur si `numeric`/`integer`, éléments pour une liste, longueur sinon) |
+| Fichiers | `file`, `image`, `mimes:jpg,pdf` : voir [Stockage de fichiers](stockage.md#enregistrer-un-fichier-envoye) |
+| Taille | `min:n`, `max:n`, `between:a,b` (valeur si `numeric`/`integer`, éléments pour une liste, kilo-octets pour un fichier, longueur sinon) |
 | Valeurs | `in:a,b`, `not_in:a,b`, `confirmed`, `same:champ`, `regex:motif` |
 | Base | `unique:table[,colonne[,id_ignoré[,colonne_id]]]`, `exists:table[,colonne]` |
+
+Une `FormRequest` lit aussi les fichiers envoyés (`request.files`, le premier par champ) ; un champ fichier sans fichier choisi compte comme vide.
 
 Un champ absent ou vide n'est soumis qu'aux règles de présence ; `None` échoue toutes les autres règles sauf avec `nullable`. Pour ignorer la ligne courante lors d'une mise à jour : `f"unique:users,email,{request.view_args['id']}"`. Les valeurs ne sont pas converties (`"42"` reste une chaîne).

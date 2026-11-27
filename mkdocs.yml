@@ -63,6 +63,7 @@ nav:
   - Données:
       - Base de données: base-de-donnees.md
       - Cache: cache.md
+      - Stockage de fichiers: stockage.md
   - Tâches de fond:
       - Événements: evenements.md
       - Mail: mail.md

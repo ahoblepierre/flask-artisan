@@ -15,6 +15,7 @@ from flask_artisan.facades import (
     RateLimiter,
     Route,
     Schedule,
+    Storage,
 )
 from flask_artisan.csrf import VerifyCsrfToken
 from flask_artisan.helpers import app, base_path, config, dispatch, event
@@ -48,6 +49,7 @@ __all__ = [
     "Router",
     "Schedule",
     "ServiceProvider",
+    "Storage",
     "VerifyCsrfToken",
     "__version__",
     "app",

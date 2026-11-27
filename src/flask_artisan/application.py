@@ -12,6 +12,7 @@ from flask_artisan.console import COMMANDS, ArtisanGroup
 from flask_artisan.container import Container
 from flask_artisan.env import load_env_file
 from flask_artisan.events import Dispatcher
+from flask_artisan.filesystem import FilesystemManager, serve_view, served_disks
 from flask_artisan.mail import Mailer
 from flask_artisan.providers import ServiceProvider
 from flask_artisan.queue import QueueManager
@@ -71,6 +72,9 @@ class Application(Flask, Container):
         cache = CacheManager(self)
         self.instance("cache", cache)
         self.instance(CacheManager, cache)
+        filesystem = FilesystemManager(self)
+        self.instance("filesystem", filesystem)
+        self.instance(FilesystemManager, filesystem)
         limiter = RateLimiter(self)
         self.instance("limiter", limiter)
         self.instance(RateLimiter, limiter)
@@ -122,9 +126,13 @@ class Application(Flask, Container):
             return
         self._booted = True
         # Les routes déclarées pendant les boot() sont poussées dans Flask à la fin.
-        with self.make(Router).collecting():
+        router = self.make(Router)
+        with router.collecting():
             for provider in list(self._providers.values()):
                 provider.boot()
+            # Après les providers : une route /storage/... du projet, déclarée avant, gagne.
+            for disk, url in served_disks(self).items():
+                router.get(f"{url}/<path:path>", serve_view(disk)).name(f"storage.{disk}")
 
     def base_path(self, path: str = "") -> Path:
         return self._base_path / path

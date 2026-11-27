@@ -82,9 +82,13 @@ def test_route_list_sorted_and_no_head_options(routed_app):
     lines = route_list(routed_app, routes)
     body = "\n".join(lines)
     assert "HEAD" not in body and "OPTIONS" not in body
-    assert [line.split()[1] for line in lines[1:]] == ["/a", "/z"]
+    # /storage/… : route du disque public, déclarée par défaut.
+    assert [line.split()[1] for line in lines[1:]] == ["/a", "/storage/<path:path>", "/z"]
 
 
-def test_route_list_empty(routed_app):
+def test_route_list_empty(routed_app, monkeypatch):
+    from flask_artisan import filesystem
+
+    monkeypatch.setattr(filesystem, "DEFAULT_DISKS", {"local": {"driver": "local"}})
     lines = route_list(routed_app, lambda: None)
     assert lines == ["Aucune route déclarée."]

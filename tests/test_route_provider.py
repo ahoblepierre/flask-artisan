@@ -112,4 +112,4 @@ def test_api_provider_marks_json(make_project):
         api=ROUTE_FILE.format('Route.get("/ping", ping)'),
     )
     flags = {route.rule: route.json for route, _, _ in Application(base).make(Router).registered}
-    assert flags == {"/": False, "/api/ping": True}
+    assert flags == {"/": False, "/api/ping": True, "/storage/<path:path>": False}
