@@ -85,3 +85,19 @@ class Mine(ServiceProvider):
 def test_project_storage_route_wins(make_project):
     app = Application(make_project(providers="[Mine]", extra=MINE))
     assert app.test_client().get("/storage/hello.txt").data == b"mine"
+
+
+def test_route_attachment_has_filename(app, client):
+    Storage.disk("public").put("page.html", b"x")
+    assert 'filename="page.html"' in client.get("/storage/page.html").headers["Content-Disposition"]
+
+
+def test_route_serves_bmp_inline(app, client):
+    Storage.disk("public").put("a.bmp", b"BM")
+    assert "attachment" not in client.get("/storage/a.bmp").headers.get("Content-Disposition", "")
+
+
+@pytest.mark.parametrize("path", [".env", "a/.tmp-abc", ".git/config"])
+def test_route_hides_dotfiles(app, client, path):
+    Storage.disk("public").put(path, "secret")
+    client.get(f"/storage/{path}").assert_status(404)

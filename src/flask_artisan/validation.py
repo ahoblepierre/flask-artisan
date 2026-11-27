@@ -1,5 +1,6 @@
 """Validation façon Laravel : règles en chaîne, `Validator`, `validate()`, erreur 422 JSON."""
 
+import io
 import json
 import math
 import re
@@ -146,10 +147,15 @@ def _size(value, field, v) -> float | None:
 
 def _file_bytes(file: FileStorage) -> int:
     stream = file.stream
-    position = stream.tell()
-    stream.seek(0, 2)
-    size = stream.tell()
-    stream.seek(position)
+    try:
+        position = stream.tell()
+        stream.seek(0, 2)
+        size = stream.tell()
+        stream.seek(position)
+    except (OSError, AttributeError):  # flux sans seek : lu une fois, gardé en mémoire
+        data = stream.read()
+        file.stream = io.BytesIO(data)
+        return len(data)
     return size
 
 
@@ -452,7 +458,8 @@ class FormRequest:
         data = request.args.to_dict()
         body = request.get_json(silent=True)
         data.update(body if isinstance(body, dict) else request.form.to_dict())
-        data.update(request.files.to_dict())  # un seul fichier par champ (le premier)
+        for key, file in request.files.items():  # le premier fichier par champ
+            data.setdefault(key, file)  # un champ texte du même nom garde sa valeur
         self._data = data
         if not self.authorize():
             raise AuthorizationError()

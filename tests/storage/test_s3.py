@@ -72,3 +72,26 @@ def test_manager_builds_s3(make_project, s3):
     )
     app.make("filesystem").disk("s3").put("x.txt", "1")
     assert s3.get_object(Bucket="bucket", Key="r/x.txt")["Body"].read() == b"1"
+
+
+def test_s3_files_skip_folder_markers(s3):
+    s3.put_object(Bucket="bucket", Key="app/dir/", Body=b"")
+    disk = S3Disk("bucket", "us-east-1", root="app")
+    disk.put("dir/x.txt", "1")
+    assert disk.files("dir") == ["dir/x.txt"]
+
+
+def test_s3_attachment_has_filename(s3):
+    S3Disk("bucket", "us-east-1").put("a.html", b"x")
+    assert (
+        'filename="a.html"' in s3.head_object(Bucket="bucket", Key="a.html")["ContentDisposition"]
+    )
+
+
+def test_s3_missing_bucket_message(make_project):
+    from flask_artisan import Application
+
+    app = Application(make_project())
+    app.make("config").set("filesystems.disks", {"s3": {"driver": "s3", "bucket": None}})
+    with pytest.raises(ValueError, match="AWS_BUCKET"):
+        app.make("filesystem").disk("s3")

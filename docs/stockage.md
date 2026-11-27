@@ -50,14 +50,14 @@ Les chemins sont relatifs à la racine du disque, avec `/` comme séparateur.
 | `exists(path)`, `missing(path)` | booléens |
 | `delete(*paths)` | `True` si tous existaient ; un fichier absent n'est pas une erreur |
 | `size(path)` | taille en octets |
-| `files(dossier="")` | les fichiers du dossier (non récursif), triés |
+| `files(dossier="")` | les fichiers du dossier (non récursif, sans les fichiers cachés), triés |
 | `url(path)` | URL publique (disque avec `url`, ou S3) |
 | `path(path)` | chemin absolu (disques `local` seulement) |
 | `put_file(dossier, fichier)` | enregistre un fichier envoyé sous un nom aléatoire ; renvoie le chemin |
 | `put_file_as(dossier, fichier, nom)` | idem, sous le nom donné |
 | `download(path, nom=None)` | réponse Flask qui télécharge le fichier (pièce jointe) |
 
-Un chemin absolu, `..`, `\`, un segment vide ou le caractère NUL lèvent `ValueError` : aucune méthode ne sort de la racine du disque.
+Un chemin absolu, `..`, `\`, `:` (lettre de lecteur), un nom de périphérique Windows (`CON`, `NUL`…), un segment vide ou le caractère NUL lèvent `ValueError`. Un lien symbolique qui mène hors de la racine aussi : aucune méthode ne sort du disque. Un dossier n'est pas un fichier : `get` et `size` lèvent `FileNotFoundError`, `delete` renvoie `False`.
 
 `get` charge le fichier entier en mémoire. Pour de très gros fichiers, utilisez `path()` sur un disque local, ou le client `boto3` directement.
 
@@ -117,7 +117,8 @@ Le disque `public` est servi par la route `GET /storage/<chemin>` (nom `storage.
 Un fichier envoyé par un utilisateur ne doit jamais s'exécuter comme une page du site (XSS stocké). Pour ça, la route :
 
 - pose toujours `X-Content-Type-Options: nosniff` ;
-- sert « en ligne » seulement les images PNG, JPEG, GIF, WebP et AVIF, le PDF, le texte brut, l'audio et la vidéo ;
+- répond 404 pour un fichier caché (un segment qui commence par `.`, comme `.env` ou une écriture en cours) ;
+- sert « en ligne » seulement les images PNG, JPEG, GIF, WebP, AVIF et BMP, le PDF, le texte brut, l'audio et la vidéo ;
 - sert tout le reste (HTML, SVG, JavaScript, fichier sans extension) en pièce jointe : le navigateur le télécharge au lieu de l'afficher.
 
 Sur S3, `put` pose les mêmes protections dans les métadonnées de l'objet (`ContentType` et `ContentDisposition: attachment` hors de cette liste), puisque le bucket ou le CDN sert le fichier sans passer par l'app.
@@ -134,10 +135,12 @@ La route Flask suffit, mais nginx sert les fichiers plus vite :
 # Pièce jointe par défaut ; en ligne seulement pour la même liste que la route.
 map $uri $storage_disposition {
     default attachment;
-    ~*\.(png|jpe?g|gif|webp|avif|pdf|txt|mp3|m4a|ogg|oga|wav|mp4|webm|ogv|mov)$ "";
+    ~*\.(png|jpe?g|gif|webp|avif|bmp|pdf|txt|mp3|m4a|ogg|oga|wav|mp4|webm|ogv|mov)$ "";
 }
 
 server {
+    location ~ /storage/(.*/)?\. { return 404; }   # fichiers cachés, comme la route
+
     location /storage/ {
         alias /chemin/du/projet/storage/app/public/;
         add_header X-Content-Type-Options nosniff always;

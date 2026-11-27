@@ -23,6 +23,7 @@ INLINE_TYPES = frozenset(
         "image/gif",
         "image/webp",
         "image/avif",
+        "image/bmp",
         "application/pdf",
         "text/plain",
     }
@@ -44,6 +45,19 @@ def guess_type(path: str) -> str:
     return mimetypes.guess_type(path)[0] or "application/octet-stream"
 
 
+# Noms de périphérique Windows : ouvrir « CON.txt » n'ouvre pas un fichier.
+WINDOWS_DEVICES = {"CON", "PRN", "AUX", "NUL"} | {
+    f"{p}{i}" for p in ("COM", "LPT") for i in range(1, 10)
+}
+
+
+def attachment(path: str) -> str:
+    """En-tête Content-Disposition en pièce jointe, avec le nom du fichier (ASCII + UTF-8)."""
+    name = path.rsplit("/", 1)[-1]
+    fallback = secure_filename(name) or "download"
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(name)}"
+
+
 def _clean(path, allow_empty: bool = False) -> str:
     """Chemin relatif sûr, `/` comme séparateur ; ValueError sinon (jamais hors du disque)."""
     if not isinstance(path, str):
@@ -53,18 +67,20 @@ def _clean(path, allow_empty: bool = False) -> str:
     # ":" : une lettre de lecteur Windows (D:x) ferait sortir de la racine du disque.
     if "\\" in path or "\x00" in path or ":" in path or path.startswith("/"):
         raise ValueError(f"Chemin refusé : {path!r}.")
-    if any(part in ("", ".", "..") for part in path.split("/")):
-        raise ValueError(f"Chemin refusé : {path!r}.")
+    for part in path.split("/"):
+        if part in ("", ".", "..") or part.split(".", 1)[0].upper() in WINDOWS_DEVICES:
+            raise ValueError(f"Chemin refusé : {path!r}.")
     return path
 
 
 def _extension(filename: str | None) -> str:
     """Extension sûre (en minuscules, avec le point) du nom envoyé, sinon ""."""
-    name = secure_filename(filename or "")
+    # Depuis le nom envoyé tel quel : secure_filename retirerait le non-ASCII (фото.png).
+    name = filename or ""
     if "." not in name:
         return ""
     ext = name.rsplit(".", 1)[1].lower()
-    return f".{ext}" if ext.isalnum() else ""
+    return f".{ext}" if ext.isascii() and ext.isalnum() else ""
 
 
 def _bytes(contents) -> bytes:
@@ -144,10 +160,23 @@ class LocalDisk(Disk):
         self._url = url
 
     def path(self, path: str) -> Path:
-        return self.root / _clean(path)
+        return self._full(_clean(path))
+
+    def _full(self, path: str) -> Path:
+        full = self.root / path
+        # Un lien symbolique dans la racine ne doit pas mener hors du disque.
+        if not full.resolve().is_relative_to(self.root):
+            raise ValueError(f"Chemin hors du disque : {path!r}.")
+        return full
+
+    def _file(self, path: str) -> Path:
+        full = self._full(path)
+        if not full.is_file():
+            raise FileNotFoundError(path)
+        return full
 
     def _write(self, path: str, data: bytes) -> None:
-        full = self.root / path
+        full = self._full(path)
         full.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=full.parent, prefix=".tmp-")
         try:
@@ -160,30 +189,30 @@ class LocalDisk(Disk):
             raise
 
     def _read(self, path: str) -> bytes:
-        return (self.root / path).read_bytes()
+        return self._file(path).read_bytes()
 
     def _exists(self, path: str) -> bool:
-        return (self.root / path).is_file()
+        return self._full(path).is_file()
 
     def _delete(self, path: str) -> bool:
         try:
-            (self.root / path).unlink()
+            self._file(path).unlink()
         except FileNotFoundError:
             return False
         return True
 
     def _size(self, path: str) -> int:
-        return (self.root / path).stat().st_size
+        return self._file(path).stat().st_size
 
     def _files(self, directory: str) -> list[str]:
-        base = self.root / directory
+        base = self._full(directory) if directory else self.root
         if not base.is_dir():
             return []
         prefix = f"{directory}/" if directory else ""
         return [
             prefix + p.name
             for p in base.iterdir()
-            if p.is_file() and not p.name.startswith(".tmp-")
+            if p.is_file() and not p.name.startswith(".")  # cachés et .tmp-* en cours
         ]
 
 
@@ -267,7 +296,7 @@ class S3Disk(Disk):
         extra = {"ContentType": content_type}
         if not is_inline(content_type):
             # Servi par le bucket ou le CDN, sans passer par notre route : protégé ici.
-            extra["ContentDisposition"] = "attachment"
+            extra["ContentDisposition"] = attachment(path)
         self.client.put_object(Bucket=self.bucket, Key=self._key(path), Body=data, **extra)
 
     def _read(self, path: str) -> bytes:
@@ -311,7 +340,11 @@ class S3Disk(Disk):
         pages = self.client.get_paginator("list_objects_v2").paginate(
             Bucket=self.bucket, Prefix=prefix, Delimiter="/"
         )
-        return [obj["Key"][strip:] for page in pages for obj in page.get("Contents", [])]
+        keys = [obj["Key"][strip:] for page in pages for obj in page.get("Contents", [])]
+        # Sans les « dossiers » de la console AWS (clé finissant par /) ni les fichiers cachés.
+        return [
+            k for k in keys if k.rsplit("/", 1)[-1] and not k.rsplit("/", 1)[-1].startswith(".")
+        ]
 
 
 PUBLIC = {
@@ -365,6 +398,8 @@ class FilesystemManager:
                 root if root.is_absolute() else self._app.base_path(str(root)), options.get("url")
             )
         if driver == "s3":
+            if not options.get("bucket"):
+                raise ValueError(f"Disque s3 {name!r} : 'bucket' manquant (AWS_BUCKET dans .env).")
             disk = S3Disk(
                 options.get("bucket"),
                 options.get("region"),
@@ -409,12 +444,14 @@ def serve(disk_name: str, path: str):
         path = _clean(path)
     except ValueError:
         abort(404)
+    if any(part.startswith(".") for part in path.split("/")):
+        abort(404)  # fichiers cachés (.env, .git) et écritures en cours (.tmp-*)
     if not isinstance(disk, LocalDisk):
         abort(404)
     response = send_from_directory(disk.root, path)
     response.headers["X-Content-Type-Options"] = "nosniff"
     if not is_inline(guess_type(path)):
-        response.headers["Content-Disposition"] = "attachment"
+        response.headers["Content-Disposition"] = attachment(path)
     return response
 
 

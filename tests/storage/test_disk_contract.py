@@ -45,7 +45,21 @@ def test_url(disk):
 
 
 @pytest.mark.parametrize(
-    "path", ["../x", "/etc/passwd", "a\\b", "a//b", "a\x00", "", "a/../b", "D:evil.txt", "a/C:x"]
+    "path",
+    [
+        "../x",
+        "/etc/passwd",
+        "a\\b",
+        "a//b",
+        "a\x00",
+        "",
+        "a/../b",
+        "D:evil.txt",
+        "a/C:x",
+        "CON.txt",
+        "a/nul",
+        "lpt1",
+    ],
 )
 def test_rejected_paths(disk, path):
     for call in (lambda: disk.put(path, "x"), lambda: disk.get(path), lambda: disk.exists(path)):
@@ -56,7 +70,15 @@ def test_rejected_paths(disk, path):
 
 
 @pytest.mark.parametrize(
-    ("name", "ext"), [("../../x.php", ".php"), ("évil.PNG", ".png"), ("noext", ""), ("", "")]
+    ("name", "ext"),
+    [
+        ("../../x.php", ".php"),
+        ("évil.PNG", ".png"),
+        ("noext", ""),
+        ("", ""),
+        ("фото.png", ".png"),
+        ("a.p/hp", ""),
+    ],
 )
 def test_put_file_names(disk, name, ext):
     path = disk.put_file("up", upload(name))
@@ -86,3 +108,19 @@ def test_assertions(disk):
         disk.assert_exists("b.txt")
     with pytest.raises(AssertionError, match="a.txt"):
         disk.assert_missing("a.txt")
+
+
+def test_directory_is_not_a_file(disk):
+    disk.put("d/x.txt", "1")
+    with pytest.raises(FileNotFoundError):
+        disk.get("d")
+    with pytest.raises(FileNotFoundError):
+        disk.size("d")
+    assert disk.delete("d") is False
+    assert disk.exists("d/x.txt")
+
+
+def test_files_skips_hidden(disk):
+    disk.put("a/.gitignore", "*")
+    disk.put("a/x.txt", "1")
+    assert disk.files("a") == ["a/x.txt"]

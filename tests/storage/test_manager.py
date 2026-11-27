@@ -75,3 +75,18 @@ def test_s3_client_reused(app):
         "filesystems.disks", {"s3": {"driver": "s3", "bucket": "bucket", "region": "eu-west-3"}}
     )
     assert Storage.disk("s3").client is Storage.disk("s3").client
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="liens symboliques")
+def test_symlink_out_of_root_refused(configured, tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("s")
+    disk = Storage.disk("public")
+    disk.put("x.txt", "1")
+    (tmp_path / "public" / "lnk").symlink_to(outside)
+    with pytest.raises(ValueError):
+        disk.get("lnk/secret.txt")
+    with pytest.raises(ValueError):
+        disk.put("lnk/new.txt", "x")
+    assert not (outside / "new.txt").exists()

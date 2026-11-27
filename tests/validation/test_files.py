@@ -77,3 +77,47 @@ def test_form_request_reads_files(routed_app):
     client.post(
         "/avatar", data={}, headers={"Accept": "application/json"}
     ).assert_json_validation_errors(["avatar"])
+
+
+class _NoSeek(io.RawIOBase):
+    def __init__(self, data):
+        self._data = io.BytesIO(data)
+
+    def readable(self):
+        return True
+
+    def readinto(self, b):
+        return self._data.readinto(b)
+
+    def seekable(self):
+        return False
+
+    def seek(self, *_):
+        raise io.UnsupportedOperation("seek")
+
+    def tell(self):
+        raise io.UnsupportedOperation("tell")
+
+
+def test_size_of_unseekable_stream():
+    file = FileStorage(stream=_NoSeek(b"x" * 3000), filename="a.png", content_type="image/png")
+    assert "f" in errors({"f": file}, {"f": "max:2"})
+    assert file.stream.read() == b"x" * 3000
+
+
+class BioRequest(FormRequest):
+    def rules(self):
+        return {"bio": "nullable|max:100"}
+
+
+def bio(request: BioRequest):
+    return {"bio": request.validated()["bio"]}
+
+
+def test_file_does_not_shadow_form_field(routed_app):
+    client = routed_app(lambda: Route.post("/bio", bio)).test_client()
+    client.post(
+        "/bio",
+        data={"bio": ["texte", (io.BytesIO(b"x"), "a.txt")]},
+        headers={"Accept": "application/json"},
+    ).assert_ok().assert_json({"bio": "texte"})
