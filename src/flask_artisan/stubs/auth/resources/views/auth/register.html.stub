@@ -1,0 +1,28 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Inscription{% endblock %}
+
+{% block content %}
+<h1>Inscription</h1>
+<form method="post" action="{{ url_for('register') }}">
+    {{ csrf_field() }}
+
+    <label for="name">Nom</label>
+    <input id="name" name="name" type="text" value="{{ old('name') }}" required autofocus>
+    {% if errors.has('name') %}<p class="error">{{ errors.first('name') }}</p>{% endif %}
+
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" value="{{ old('email') }}" required>
+    {% if errors.has('email') %}<p class="error">{{ errors.first('email') }}</p>{% endif %}
+
+    <label for="password">Mot de passe</label>
+    <input id="password" name="password" type="password" required autocomplete="new-password">
+    {% if errors.has('password') %}<p class="error">{{ errors.first('password') }}</p>{% endif %}
+
+    <label for="password_confirmation">Confirmer le mot de passe</label>
+    <input id="password_confirmation" name="password_confirmation" type="password" required autocomplete="new-password">
+
+    <button type="submit">Créer mon compte</button>
+</form>
+<p><a href="{{ url_for('login') }}">Déjà inscrit ? Se connecter</a></p>
+{% endblock %}

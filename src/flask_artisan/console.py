@@ -181,6 +181,46 @@ def make_notification(name, force):
     click.echo(f"Envoyez-la :\n  {_import_line(path, cls)}\n  user.notify({cls}(...))")
 
 
+AUTH_STEPS = """
+Reste à faire à la main :
+  1. app/models/user.py : ajoutez MustVerifyEmail avant Model (vérification de l'e-mail)
+       from flask_artisan.auth import MustVerifyEmail
+       class User(MustVerifyEmail, Authenticatable, HasApiTokens, Notifiable, Model): ...
+  2. Facultatif, app/http/kernel.py : alias des middlewares (déjà là dans un projet récent)
+       "verified": EnsureEmailIsVerified,  # from flask_artisan.auth
+       "signed": ValidateSignature,        # from flask_artisan
+     puis .middleware("verified") sur les routes à protéger (ex. /dashboard).
+  3. Liens : « S'inscrire » (url_for('register')) dans resources/views/layouts/app.html,
+     « Mot de passe oublié ? » (url_for('password.request')) dans resources/views/auth/login.html.
+  4. flask make:migration "auth install" puis flask migrate
+     (table password_reset_tokens, colonne email_verified_at).
+  5. config/mail.py : configurez un vrai transport (le pilote log n'envoie rien)."""
+
+
+@click.command("auth:install")
+@with_appcontext
+def auth_install():
+    """Installe inscription, mot de passe oublié et vérification de l'e-mail."""
+    source = STUBS / "auth"
+    root = current_app.base_path()
+    files = {
+        stub: root / stub.relative_to(source).with_suffix("")
+        for stub in sorted(source.rglob("*.stub"))
+    }
+    existing = [target for target in files.values() if target.exists()]
+    if existing:
+        # Tout ou rien : on ne modifie jamais un fichier du projet.
+        click.echo("Fichiers déjà présents, rien n'a été installé :")
+        for target in existing:
+            click.echo(f"  {target.relative_to(root).as_posix()}")
+        raise click.exceptions.Exit(1)
+    for stub, target in files.items():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(stub.read_text())
+        click.echo(f"Créé : {target.relative_to(root).as_posix()}")
+    click.echo(AUTH_STEPS)
+
+
 @click.command("make:model")
 @click.argument("name")
 @force_option
@@ -281,6 +321,7 @@ COMMANDS = [
     make_mail,
     make_job,
     make_notification,
+    auth_install,
     route_list,
     *QUEUE_COMMANDS,
     cache_clear,

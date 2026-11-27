@@ -1,0 +1,22 @@
+from app.http.requests.register_request import RegisterRequest
+from app.models.user import User
+from flask import flash, redirect, render_template, url_for
+
+from flask_artisan import Auth
+from flask_artisan.auth import MustVerifyEmail
+
+
+class RegisteredUserController:
+    """Inscription : crée le compte, connecte, envoie le lien de vérification."""
+
+    def create(self):
+        return render_template("auth/register.html")
+
+    def store(self, request: RegisterRequest):
+        data = request.validated()
+        user = User.create(name=data["name"], email=data["email"], password=data["password"])
+        Auth.login(user)
+        if isinstance(user, MustVerifyEmail):
+            user.send_email_verification_notification()
+        flash("Bienvenue !")
+        return redirect(url_for("dashboard"))

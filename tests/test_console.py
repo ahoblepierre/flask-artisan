@@ -363,3 +363,50 @@ def test_make_notification(artisan):
     assert "user.notify(InvoicePaid(" in result.output
     assert_ruff_clean(path)
     assert run("make:notification", "InvoicePaid").exit_code != 0
+
+
+AUTH_FILES = [
+    "routes/auth.py",
+    "app/http/controllers/auth/__init__.py",
+    "app/http/controllers/auth/registered_user_controller.py",
+    "app/http/controllers/auth/password_reset_link_controller.py",
+    "app/http/controllers/auth/new_password_controller.py",
+    "app/http/controllers/auth/email_verification_controller.py",
+    "app/http/requests/register_request.py",
+    "app/http/requests/forgot_password_request.py",
+    "app/http/requests/reset_password_request.py",
+    "resources/views/auth/register.html",
+    "resources/views/auth/forgot_password.html",
+    "resources/views/auth/reset_password.html",
+    "resources/views/auth/verify_email.html",
+    "tests/test_auth_flows.py",
+]
+
+
+def test_auth_install_creates_files(artisan):
+    app, run = artisan
+    result = run("auth:install")
+    assert result.exit_code == 0, result.output
+    root = app.base_path()
+    for name in AUTH_FILES:
+        assert (root / name).is_file(), name
+        assert f"Créé : {name}" in result.output
+    assert not list(root.rglob("*.stub"))
+    assert "MustVerifyEmail" in result.output
+    assert "flask make:migration" in result.output
+    for name in AUTH_FILES:
+        if name.endswith(".py"):
+            assert_ruff_clean(root / name)
+
+
+def test_auth_install_conflict_writes_nothing(artisan):
+    app, run = artisan
+    existing = app.base_path("resources/views/auth/register.html")
+    existing.parent.mkdir(parents=True)
+    existing.write_text("mine")
+    result = run("auth:install")
+    assert result.exit_code == 1
+    assert "resources/views/auth/register.html" in result.output
+    assert existing.read_text() == "mine"
+    assert not app.base_path("routes/auth.py").exists()
+    assert not app.base_path("tests/test_auth_flows.py").exists()

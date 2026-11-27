@@ -1,0 +1,31 @@
+from app.http.controllers.auth.email_verification_controller import EmailVerificationController
+from app.http.controllers.auth.new_password_controller import NewPasswordController
+from app.http.controllers.auth.password_reset_link_controller import PasswordResetLinkController
+from app.http.controllers.auth.registered_user_controller import RegisteredUserController
+
+from flask_artisan import Route, ValidateSignature
+
+# Installé par flask auth:install ; chargé dans le groupe "web" (CSRF) comme routes/web.py.
+# Les routes "throttle:6,1" partagent un même compteur par IP (ou par utilisateur connecté).
+
+Route.get("/register", RegisteredUserController.create).name("register")
+Route.post("/register", RegisteredUserController.store).middleware("throttle:6,1")
+
+Route.get("/forgot-password", PasswordResetLinkController.create).name("password.request")
+Route.post("/forgot-password", PasswordResetLinkController.store).name("password.email").middleware(
+    "throttle:6,1"
+)
+
+Route.get("/reset-password/<token>", NewPasswordController.create).name("password.reset")
+Route.post("/reset-password", NewPasswordController.store).name("password.store").middleware(
+    "throttle:6,1"
+)
+
+with Route.middleware("auth"):
+    Route.get("/verify-email", EmailVerificationController.notice).name("verification.notice")
+    Route.get("/verify-email/<int:id>/<hash>", EmailVerificationController.verify).name(
+        "verification.verify"
+    ).middleware(ValidateSignature, "throttle:6,1")
+    Route.post("/email/verification-notification", EmailVerificationController.send).name(
+        "verification.send"
+    ).middleware("throttle:6,1")
