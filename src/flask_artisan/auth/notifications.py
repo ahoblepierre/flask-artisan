@@ -8,17 +8,29 @@ from flask_artisan.notifications import Notification
 from flask_artisan.signing import signed_url
 
 
+def _absolute(relative: str) -> str:
+    # Jamais l'en-tête Host de la requête : un attaquant recevrait le jeton de la victime.
+    base = config("app.url")
+    if not base:
+        raise RuntimeError(
+            "Définissez APP_URL (config app.url, ex. https://exemple.fr) : les liens envoyés "
+            "par e-mail ne doivent pas dépendre de l'en-tête Host de la requête."
+        )
+    return str(base).rstrip("/") + relative
+
+
 def reset_url(notifiable, token: str) -> str:
-    return url_for("password.reset", token=token, email=notifiable.email, _external=True)
+    return _absolute(url_for("password.reset", token=token, email=notifiable.email))
 
 
 def verification_url(notifiable) -> str:
-    return signed_url(
-        "verification.verify",
-        expires=config("auth.verification.expire", 60) * 60,
-        id=notifiable.id,
-        hash=hashlib.sha1(notifiable.email.encode()).hexdigest(),
-        _external=True,
+    return _absolute(
+        signed_url(
+            "verification.verify",
+            expires=config("auth.verification.expire", 60) * 60,
+            id=notifiable.id,
+            hash=hashlib.sha1(notifiable.email.encode()).hexdigest(),
+        )
     )
 
 

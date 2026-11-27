@@ -1,3 +1,5 @@
+from urllib.parse import urlsplit
+
 import pytest
 from app.models.user import User
 from wsgi import app
@@ -45,7 +47,8 @@ def registered(client) -> User:
 
 def link(user) -> str:
     with app.test_request_context():
-        return verification_url(user).removeprefix("http://localhost")
+        parts = urlsplit(verification_url(user))
+    return f"{parts.path}?{parts.query}"
 
 
 def test_register_creates_user_and_logs_in(client, fake):

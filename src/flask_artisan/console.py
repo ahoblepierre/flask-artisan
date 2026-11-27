@@ -194,7 +194,9 @@ Reste à faire à la main :
      « Mot de passe oublié ? » (url_for('password.request')) dans resources/views/auth/login.html.
   4. flask make:migration "auth install" puis flask migrate
      (table password_reset_tokens, colonne email_verified_at).
-  5. config/mail.py : configurez un vrai transport (le pilote log n'envoie rien)."""
+  5. config/mail.py : configurez un vrai transport (le pilote log n'envoie rien).
+  6. .env : APP_URL=https://votre-domaine (liens des mails) ; dans un projet généré
+     avant la 0.10, ajoutez aussi "url": env("APP_URL") à config/app.py."""
 
 
 @click.command("auth:install")

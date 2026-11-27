@@ -54,13 +54,14 @@ flask auth:install
 
 Elle crée `routes/auth.py`, quatre controllers dans `app/http/controllers/auth/`, trois FormRequests, quatre vues dans `resources/views/auth/` et `tests/test_auth_flows.py`. Elle ne modifie et n'écrase jamais un fichier : si l'un d'eux existe déjà, elle n'écrit rien, liste les fichiers en conflit et sort avec le code 1.
 
-Il reste cinq étapes à faire à la main, rappelées en fin de commande :
+Il reste six étapes à faire à la main, rappelées en fin de commande :
 
 1. Ajouter `MustVerifyEmail` au `User`, **avant** `Model` : `class User(MustVerifyEmail, Authenticatable, HasApiTokens, Notifiable, Model)`, importé depuis `flask_artisan.auth`. Tant que ce n'est pas fait, les tests de vérification de `tests/test_auth_flows.py` sont sautés.
 2. Facultatif : ajouter les alias `"verified": EnsureEmailIsVerified` et `"signed": ValidateSignature` dans `app/http/kernel.py`. Un projet généré depuis la 0.10 les a déjà.
 3. Ajouter les liens « S'inscrire » (`url_for('register')`) dans `layouts/app.html` et « Mot de passe oublié ? » (`url_for('password.request')`) dans `auth/login.html`.
 4. Lancer `flask make:migration "auth install"` puis `flask migrate`, pour créer la table `password_reset_tokens` et la colonne `email_verified_at`.
 5. Configurer un vrai transport dans `config/mail.py` : le pilote `log` n'envoie rien.
+6. Renseigner `APP_URL` dans `.env` (par exemple `https://exemple.fr`). Un projet généré avant la 0.10 doit aussi ajouter `"url": env("APP_URL")` à `config/app.py`.
 
 `routes/auth.py` est chargé automatiquement dans le groupe `web` (CSRF), après `routes/web.py` :
 
@@ -104,7 +105,7 @@ Le lien envoyé est signé et expire après 60 minutes (`"verification": {"expir
 
 Les deux mails, `ResetPassword` et `VerifyEmail` (`flask_artisan.auth.notifications`), passent par le canal mail des [notifications](notifications.md) : le `User` doit hériter de `Notifiable`, comme celui du squelette. Pour changer leur texte, créez dans le projet `resources/views/flask_artisan/emails/reset_password.html` (et `.txt`), ou `verify_email.html` (et `.txt`). Ces fichiers ont accès aux variables `url` et `expire`. Pour envoyer un tout autre mail, redéfinissez `send_password_reset_notification(token)` ou `send_email_verification_notification()` sur le `User`.
 
-Les liens des mails sont absolus et construits à partir de la requête en cours. Derrière un proxy, réglez `TRUSTED_PROXIES` (voir [Derrière un proxy](limitation-de-debit.md#derriere-un-proxy)), sinon ils partent en `http://`.
+Les liens des mails sont absolus et commencent par `APP_URL` (`config("app.url")`), jamais par l'hôte de la requête : sinon, un attaquant qui enverrait la demande avec un en-tête `Host` à lui ferait partir le jeton de la victime vers son propre site. Sans `APP_URL`, l'envoi lève une erreur.
 
 ### URLs signées
 

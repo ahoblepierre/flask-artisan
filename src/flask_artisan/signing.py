@@ -1,8 +1,9 @@
 import hashlib
 import hmac
 import time
+from urllib.parse import unquote, urlsplit
 
-from flask import current_app, url_for
+from flask import current_app, has_request_context, request, url_for
 
 from flask_artisan.middleware import Middleware
 
@@ -18,6 +19,19 @@ def _sign(message: str) -> str:
     return hmac.new(key, message.encode(), hashlib.sha256).hexdigest()
 
 
+def _canonical(relative: str) -> str:
+    """Chemin décodé, sans le préfixe de montage (SCRIPT_NAME), puis la requête telle quelle.
+
+    C'est la forme que la vérification relit : `request.path` est décodé et sans préfixe.
+    """
+    parts = urlsplit(relative)
+    root = request.script_root if has_request_context() else ""
+    path = unquote(parts.path)
+    if root and path.startswith(root):
+        path = path[len(root) :]
+    return path + (f"?{parts.query}" if parts.query else "")
+
+
 def signed_url(endpoint: str, expires: int | None = None, **values) -> str:
     """URL de `endpoint` signée par APP_KEY ; `expires` : durée de validité en secondes.
 
@@ -27,7 +41,7 @@ def signed_url(endpoint: str, expires: int | None = None, **values) -> str:
     if expires is not None:
         values["expires"] = int(_now()) + expires
     relative = url_for(endpoint, **values)
-    signature = _sign(relative)
+    signature = _sign(_canonical(relative))
     if external:
         # Même chemin, même ordre des paramètres : signature ajoutée en dernier.
         return url_for(endpoint, **values, signature=signature, _external=True)

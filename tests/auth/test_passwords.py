@@ -124,3 +124,14 @@ def test_config_overrides_expiry(app, ada, fake, clock):
     Password.send_reset_link("ada@x.org")
     clock(minutes=6)
     assert Password.reset("ada@x.org", emailed_token(fake, ada), "x") == Password.INVALID_TOKEN
+
+
+def test_token_is_keyed_on_stored_email(ada, fake, monkeypatch):
+    # Base insensible à la casse (MySQL) : "Ada@x.org" trouve le compte "ada@x.org".
+    monkeypatch.setattr(Password, "_user", staticmethod(lambda email: ada))
+    assert Password.send_reset_link("Ada@x.org") == Password.RESET_LINK_SENT
+    [row] = PasswordResetToken.all()
+    assert row.email == "ada@x.org"
+    assert Password.send_reset_link("ADA@x.org") == Password.RESET_THROTTLED
+    token = emailed_token(fake, ada)
+    assert Password.reset("Ada@X.org", token, "new-secret") == Password.PASSWORD_RESET

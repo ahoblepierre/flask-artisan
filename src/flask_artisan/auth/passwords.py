@@ -52,6 +52,7 @@ class Password:
         user = cls._user(email)
         if user is None:
             return cls.INVALID_USER
+        email = user.email  # clé = l'adresse enregistrée (base insensible à la casse)
         db = _db()
         row = db.session.get(PasswordResetToken, email)
         throttle = timedelta(seconds=config("auth.passwords.throttle", 60))
@@ -74,7 +75,7 @@ class Password:
         if user is None:
             return cls.INVALID_USER
         db = _db()
-        row = db.session.get(PasswordResetToken, email)
+        row = db.session.get(PasswordResetToken, user.email)
         expire = timedelta(minutes=config("auth.passwords.expire", 60))
         if (
             row is None

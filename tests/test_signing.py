@@ -67,3 +67,22 @@ def test_signature_depends_on_app_key(app, client):
     url = sign(app, id=3)
     app.config["SECRET_KEY"] = "another-key"
     assert client.get(url).status_code == 403
+
+
+def test_encoded_path_params_are_accepted(routed_app):
+    app = routed_app(
+        lambda: Route.get("/s/<name>", lambda name: name).name("s").middleware(ValidateSignature)
+    )
+    client = app.test_client()
+    for name in ("a b", "é", "x@y"):
+        with app.test_request_context():
+            url = signed_url("s", name=name)
+        assert client.get(url).get_data(as_text=True) == name, url
+
+
+def test_app_under_script_root(app, client):
+    with app.test_request_context(base_url="http://localhost/app/"):
+        url = signed_url("files.show", id=3)
+    assert url.startswith("/app/files/3")
+    response = client.get(url.removeprefix("/app"), base_url="http://localhost/app/")
+    response.assert_ok()

@@ -11,6 +11,8 @@ config = {
     "env": env("APP_ENV", "production"),
     "debug": env("APP_DEBUG", False),
     "key": env("APP_KEY", ""),
+    # Adresse publique de l'app (schéma + hôte) : liens absolus des mails (auth:install).
+    "url": env("APP_URL", "http://localhost:5000"),
     # Fuseau des tâches planifiées (routes/console.py) : nom IANA, ex. "Europe/Paris".
     "timezone": env("APP_TIMEZONE", "UTC"),
     # Nombre de proxys devant l'app (nginx, load balancer) : l'IP du client est lue dans

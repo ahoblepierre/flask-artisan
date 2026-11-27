@@ -12,6 +12,7 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 - URLs signées : `signed_url(...)` et middleware `signed` (`ValidateSignature`) (#59).
 - Notifications `ResetPassword` et `VerifyEmail`, aux templates surchargeables dans `resources/views/flask_artisan/emails/` (#59).
 - `RouteServiceProvider` charge `routes/auth.py` dans le groupe `web` s'il existe (#59).
+- Squelette : `APP_URL` (`config("app.url")`), base des liens envoyés par e-mail, jamais l'en-tête `Host` (#59).
 
 ## [0.9.0] - 2026-11-27
 

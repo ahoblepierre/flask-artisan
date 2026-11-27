@@ -30,6 +30,7 @@ def app(db_app):
         configs={"auth": AUTH_CONFIG, "mail": MAIL_CONFIG},
     )
     app.make("config").set("auth.model", PwUser)
+    app.make("config").set("app.url", "http://localhost")
     app.register(type("Routes", (ServiceProvider,), {"boot": lambda self: routes()}))
     return app
 
@@ -86,3 +87,24 @@ def test_auth_import_does_not_load_notifications():
     )
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert out.stdout.strip() == "[]"
+
+
+def test_links_use_app_url_not_host_header(app):
+    app.make("config").set("app.url", "https://shop.example/")
+    with app.app_context():
+        user = PwUser.create(email="ada@x.org", password="secret")
+        with app.test_request_context(base_url="http://evil.example/"):
+            user.notify(ResetPassword("abc"))
+            user.notify(VerifyEmail())
+    texts = [m.get_body(("plain",)).get_content() for m in Mail.transport("array").messages]
+    for text in texts:
+        assert "https://shop.example/" in text
+        assert "evil.example" not in text
+
+
+def test_missing_app_url_is_an_error(app):
+    app.make("config").set("app.url", "")
+    with app.app_context():
+        user = PwUser.create(email="ada@x.org", password="secret")
+        with app.test_request_context(), pytest.raises(RuntimeError, match="APP_URL"):
+            user.notify(ResetPassword("abc"))
