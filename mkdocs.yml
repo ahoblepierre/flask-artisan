@@ -58,6 +58,7 @@ nav:
       - Validation: validation.md
       - Authentification: authentification.md
       - Limitation de débit et verrous: limitation-de-debit.md
+      - Tests HTTP: tests-http.md
   - Données:
       - Base de données: base-de-donnees.md
       - Cache: cache.md

@@ -18,6 +18,7 @@ from flask_artisan.queue import QueueManager
 from flask_artisan.rate_limiting import RateLimiter
 from flask_artisan.routing import Router
 from flask_artisan.scheduling import Schedule
+from flask_artisan.testing import TestClient
 
 
 class Application(Flask, Container):
@@ -39,6 +40,7 @@ class Application(Flask, Container):
         self.jinja_loader = ChoiceLoader(
             [FileSystemLoader(base / "resources" / "views"), FileSystemLoader(base / "templates")]
         )
+        self.test_client_class = TestClient  # à l'instance, comme jinja_loader
         self._base_path = base
         self._providers: dict[type, ServiceProvider] = {}
         self._booted = False
