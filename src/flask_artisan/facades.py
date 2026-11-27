@@ -56,3 +56,7 @@ class Cache(Facade):
 
 class RateLimiter(Facade):
     accessor = "limiter"
+
+
+class Schedule(Facade):
+    accessor = "schedule"

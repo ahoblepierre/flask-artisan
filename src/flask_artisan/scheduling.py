@@ -1,8 +1,13 @@
 """Tâches planifiées : `Schedule` (façade `Schedule`), `flask schedule:run|work|list`."""
 
+import importlib.util
 import re
+import shlex
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+import click
 
 # (minimum, maximum) de chaque champ : minute, heure, jour du mois, mois, jour de semaine.
 _FIELDS = ((0, 59), (0, 23), (1, 31), (1, 12), (0, 7))
@@ -226,3 +231,53 @@ def _time(text: str, method: str) -> tuple[int, int]:
     if not match or int(match[1]) > 23 or int(match[2]) > 59:
         raise ValueError(f"{method} : heure {text!r} invalide (format HH:MM).")
     return int(match[1]), int(match[2])
+
+
+class Schedule:
+    """Le registre des tâches (`"schedule"`, façade `Schedule`), rempli par routes/console.py."""
+
+    def __init__(self, app):
+        self._app = app
+        self._events: list[Event] = []
+
+    def command(self, name: str) -> Event:
+        return self._add(Event("command", name, args=shlex.split(name)))
+
+    def job(self, job, queue: str | None = None, connection: str | None = None) -> Event:
+        event = Event("job", job)
+        event.queue, event.connection = queue, connection
+        return self._add(event)
+
+    def call(self, fn, *args, **kwargs) -> Event:
+        return self._add(Event("call", fn, args, kwargs))
+
+    def _add(self, event: Event) -> Event:
+        self._events.append(event)
+        return event
+
+    def events(self) -> list[Event]:
+        return list(self._events)
+
+    def timezone(self) -> str:
+        name = self._app.make("config").get("app.timezone", "UTC")
+        zone(name, "APP_TIMEZONE (config app.timezone)")
+        return name
+
+    def due_events(self, now: datetime) -> list[Event]:
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("due_events attend un datetime avec fuseau (tzinfo).")
+        default = self.timezone()
+        return [event for event in self._events if event.is_due(now, default)]
+
+    def load(self, path: Path) -> None:
+        """Vide le registre puis exécute routes/console.py ; un fichier absent est ignoré."""
+        self._events = []
+        path = Path(path)
+        if not path.exists():
+            return
+        spec = importlib.util.spec_from_file_location("flask_artisan_schedule_console", path)
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except Exception as exc:
+            raise click.ClickException(f"Erreur dans {path} : {exc}") from exc

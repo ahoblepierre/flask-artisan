@@ -14,6 +14,7 @@ from flask_artisan.facades import (
     Queue,
     RateLimiter,
     Route,
+    Schedule,
 )
 from flask_artisan.helpers import app, base_path, config, dispatch, event
 from flask_artisan.middleware import HttpKernel, Middleware
@@ -44,6 +45,7 @@ __all__ = [
     "RouteError",
     "RouteServiceProvider",
     "Router",
+    "Schedule",
     "ServiceProvider",
     "__version__",
     "app",
