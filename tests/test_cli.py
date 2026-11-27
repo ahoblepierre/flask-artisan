@@ -352,3 +352,34 @@ def test_generated_project_storage(project):
     out = run(project, "-c", STORAGE_FLOW)
     assert out.stdout.strip() == "OK", out.stdout + out.stderr
     assert (project / "storage" / "app" / "public" / "x.txt").read_text() == "hi"
+
+
+NOTIFICATION_FLOW = """
+from wsgi import app
+from app.models.user import User
+from flask_artisan.notifications import Notification
+
+
+class Welcome(Notification):
+    def via(self, notifiable):
+        return ["database"]
+
+    def to_database(self, notifiable):
+        return {"hello": notifiable.name}
+
+
+with app.app_context():
+    user = User.create(name="Ada", email="ada@example.org", password="secret")
+    user.notify(Welcome())
+    assert [n.data for n in user.unread_notifications.get()] == [{"hello": "Ada"}]
+print("OK")
+"""
+
+
+def test_generated_project_notifications(project):
+    assert (project / "app" / "notifications").is_dir()
+    for args in (("make:migration", "init"), ("migrate",)):
+        result = run(project, "-m", "flask", *args)
+        assert result.returncode == 0, result.stdout + result.stderr
+    out = run(project, "-c", NOTIFICATION_FLOW)
+    assert out.stdout.strip() == "OK", out.stdout + out.stderr

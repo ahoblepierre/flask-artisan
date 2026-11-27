@@ -67,6 +67,7 @@ nav:
   - Tâches de fond:
       - Événements: evenements.md
       - Mail: mail.md
+      - Notifications: notifications.md
       - Queues: queues.md
       - Tâches planifiées: planification.md
   - Console: console.md

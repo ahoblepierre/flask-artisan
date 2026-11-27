@@ -348,3 +348,18 @@ def test_make_job_subfolder(artisan):
     app, run = artisan
     assert run("make:job", "Media/Transcode").exit_code == 0
     assert app.base_path("app/jobs/media/transcode.py").is_file()
+
+
+def test_make_notification(artisan):
+    from flask_artisan.notifications import Notification
+
+    app, run = artisan
+    result = run("make:notification", "InvoicePaid")
+    assert result.exit_code == 0, result.output
+    path = app.base_path("app/notifications/invoice_paid.py")
+    cls = load(path).InvoicePaid
+    assert issubclass(cls, Notification)
+    assert cls().via(None) == ["mail", "database"]
+    assert "user.notify(InvoicePaid(" in result.output
+    assert_ruff_clean(path)
+    assert run("make:notification", "InvoicePaid").exit_code != 0

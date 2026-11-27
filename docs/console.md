@@ -11,6 +11,7 @@ flask make:event OrderShipped                    # app/events/order_shipped.py
 flask make:listener SendShipmentNotification --event OrderShipped  # app/listeners/…
 flask make:mail OrderShipped                     # app/mail/order_shipped.py + son template
 flask make:job ProcessPodcast                    # app/jobs/process_podcast.py
+flask make:notification InvoicePaid              # app/notifications/invoice_paid.py
 flask make:request StorePostRequest              # app/http/requests/store_post_request.py
 flask make:middleware EnsureJson                 # app/http/middleware/ensure_json.py
 flask make:provider PaymentServiceProvider       # app/providers/payment_service_provider.py

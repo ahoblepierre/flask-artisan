@@ -170,6 +170,17 @@ def make_job(name, force):
     click.echo(f"Envoyez-le :\n  {_import_line(path, cls)}\n  {cls}.dispatch(...)")
 
 
+@click.command("make:notification")
+@click.argument("name")
+@force_option
+@with_appcontext
+def make_notification(name, force):
+    """Crée une notification (canaux mail, database) dans app/notifications."""
+    path = write_stub("app/notifications", name, "notification", force=force)
+    _, cls = split_name(name, allow_dirs=True)
+    click.echo(f"Envoyez-la :\n  {_import_line(path, cls)}\n  user.notify({cls}(...))")
+
+
 @click.command("make:model")
 @click.argument("name")
 @force_option
@@ -269,6 +280,7 @@ COMMANDS = [
     make_listener,
     make_mail,
     make_job,
+    make_notification,
     route_list,
     *QUEUE_COMMANDS,
     cache_clear,
