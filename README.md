@@ -40,6 +40,7 @@ with Route.prefix("/admin").name("admin.").middleware("auth"):
 
 - [Conteneur de services](https://ahoblepierre.github.io/flask-artisan/conteneur/), [service providers](https://ahoblepierre.github.io/flask-artisan/service-providers/), [configuration](https://ahoblepierre.github.io/flask-artisan/configuration/), [façades](https://ahoblepierre.github.io/flask-artisan/facades/)
 - [Routage, controllers et middlewares](https://ahoblepierre.github.io/flask-artisan/routage/)
+- [Vues et formulaires](https://ahoblepierre.github.io/flask-artisan/vues/) (erreurs et `old()` après redirection, CSRF, page de connexion)
 - [Validation](https://ahoblepierre.github.io/flask-artisan/validation/) (Form Requests, réponses 422)
 - [Authentification](https://ahoblepierre.github.io/flask-artisan/authentification/) (guards session et token)
 - [Limitation de débit et verrous](https://ahoblepierre.github.io/flask-artisan/limitation-de-debit/)

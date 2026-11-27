@@ -16,7 +16,7 @@ user = User.create(email="a@x", password="secret")   # stocké haché (scrypt)
 user.check_password("secret")                        # True
 ```
 
-Deux guards sont déclarés dans `config/auth.py` : `web` (session Flask) et `api` (token Bearer en base).
+Deux guards sont déclarés dans `config/auth.py` : `web` (session Flask) et `api` (token Bearer en base). Le squelette contient une page de connexion pour le guard `web` (`/login`, `/logout`, `/dashboard`) : voir [Vues et formulaires](vues.md#la-page-de-connexion-du-squelette).
 
 ```python
 from flask_artisan import Auth

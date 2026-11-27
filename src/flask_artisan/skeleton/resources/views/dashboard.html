@@ -1,0 +1,11 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Tableau de bord{% endblock %}
+
+{% block content %}
+<h1>Bonjour {{ user.name }}</h1>
+<form method="post" action="{{ url_for('logout') }}">
+    {{ csrf_field() }}
+    <button type="submit">Se déconnecter</button>
+</form>
+{% endblock %}

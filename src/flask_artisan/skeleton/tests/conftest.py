@@ -10,6 +10,9 @@ os.environ["CACHE_STORE"] = "array"
 import pytest
 from wsgi import app
 
+# Contrôle CSRF sauté pendant les tests (comme Laravel) ; exceptions remontées à pytest.
+app.testing = True
+
 from flask_artisan import DB, Cache
 
 

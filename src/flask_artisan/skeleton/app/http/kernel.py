@@ -1,4 +1,4 @@
-from flask_artisan import HttpKernel
+from flask_artisan import HttpKernel, VerifyCsrfToken
 from flask_artisan.auth import Authenticate
 from flask_artisan.rate_limiting import ThrottleRequests
 
@@ -15,6 +15,6 @@ class Kernel(HttpKernel):
 
     # Appliqués automatiquement à routes/web.py et routes/api.py.
     groups = {
-        "web": [],
+        "web": [VerifyCsrfToken],  # champ csrf_field() ou en-tête X-CSRF-TOKEN
         "api": ["throttle:60,1"],
     }

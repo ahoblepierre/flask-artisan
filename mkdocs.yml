@@ -55,6 +55,7 @@ nav:
       - Façades: facades.md
   - HTTP:
       - Routage: routage.md
+      - Vues et formulaires: vues.md
       - Validation: validation.md
       - Authentification: authentification.md
       - Limitation de débit et verrous: limitation-de-debit.md

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Accueil{% endblock %}</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 3rem auto; padding: 0 1rem; }
+        label, input, button { display: block; margin-top: .5rem; }
+        .flash { background: #e6f4ea; padding: .5rem 1rem; }
+        .error { color: #b00020; font-size: .9rem; }
+    </style>
+</head>
+<body>
+    {% for message in get_flashed_messages() %}
+        <p class="flash">{{ message }}</p>
+    {% endfor %}
+    {% block content %}{% endblock %}
+</body>
+</html>
