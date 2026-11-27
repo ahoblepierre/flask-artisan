@@ -120,3 +120,30 @@ def test_middleware_sees_validation_responses(routed_app):
         r = client.post(url, json={})
         assert r.status_code == status
         assert r.headers.get("X-Stamp") == "1"
+
+
+def store_with_default(request: StoreRequest = None):
+    return {}
+
+
+class DefaultCtl:
+    def store(self, request: StoreRequest = None):
+        return {}
+
+
+@pytest.mark.parametrize("handler", [store_with_default, DefaultCtl.store])
+def test_form_request_default_refused(routed_app, handler):
+    from flask_artisan.routing import RouteError
+
+    with pytest.raises(RouteError, match=r"request.*valeur par défaut"):
+        routed_app(lambda: Route.post("/p", handler))
+
+
+def unreadable(request: "Inconnu" = None):  # noqa: F821
+    return {"ok": True}
+
+
+def test_form_request_default_with_string_annotations(routed_app):
+    # Annotations illisibles : la vérification n'empêche pas d'enregistrer la route.
+    app = routed_app(lambda: Route.post("/p", unreadable))
+    assert any(rule.rule == "/p" for rule in app.url_map.iter_rules())

@@ -2,6 +2,7 @@ import importlib.util
 import inspect
 import json
 import sys
+import typing
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
@@ -11,7 +12,7 @@ from flask import redirect, request, session
 from werkzeug.exceptions import Forbidden
 
 from flask_artisan.middleware import HttpKernel, expects_json, resolve
-from flask_artisan.validation import AuthorizationError, ValidationError
+from flask_artisan.validation import AuthorizationError, FormRequest, ValidationError
 
 # Jamais gardés en session pour old() (comme dontFlash de Laravel).
 DONT_FLASH = {"password", "password_confirmation", "current_password", "_token"}
@@ -182,6 +183,7 @@ class Router:
                     f"Middleware inconnu '{exc.args[0]}' sur la route {route.rule} : "
                     "déclarez-le dans `middleware` ou `groups` du kernel."
                 ) from None
+            _check_form_request_defaults(route)
             view = self._view(route, stack)
             self._app.add_url_rule(route.rule, endpoint, view, methods=route.methods)
             self.registered.append((route, endpoint, stack))
@@ -251,6 +253,27 @@ class Router:
             return run(0, request._get_current_object())
 
         return view
+
+
+def _check_form_request_defaults(route: PendingRoute) -> None:
+    """Une FormRequest avec valeur par défaut : le conteneur prendrait le défaut, sans valider."""
+    cls, target = route.handler
+    fn = getattr(cls, target) if cls else target
+    try:
+        hints = typing.get_type_hints(fn)
+    except Exception:  # noqa: BLE001 (annotations illisibles : le conteneur le signalera à l'appel)
+        return
+    for name, param in inspect.signature(fn).parameters.items():
+        hint = hints.get(name)
+        if (
+            isinstance(hint, type)
+            and issubclass(hint, FormRequest)
+            and param.default is not param.empty
+        ):
+            raise RouteError(
+                f"Route {route.rule} : le paramètre '{name}' ({hint.__name__}) ne doit pas avoir "
+                "de valeur par défaut : le conteneur la prendrait et la validation serait sautée."
+            )
 
 
 def _redirect_back(req, errors: dict):
