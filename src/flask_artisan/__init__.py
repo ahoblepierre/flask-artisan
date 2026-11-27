@@ -24,7 +24,7 @@ from flask_artisan.providers import ServiceProvider
 from flask_artisan.route_provider import RouteServiceProvider
 from flask_artisan.routing import RouteError, Router
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 __all__ = [
     "DB",
