@@ -1,10 +1,13 @@
 import json
+import logging
 
 from flask_artisan.notifications.models import DatabaseNotification
 from flask_artisan.notifications.notifiable import AnonymousNotifiable
 from flask_artisan.queue.serialization import class_path
 
 CHANNELS = ("mail", "database")
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationSender:
@@ -58,7 +61,17 @@ class NotificationSender:
         return method(notifiable)
 
     def _send_mail(self, notifiable, notification) -> None:
-        raise NotImplementedError("Canal mail : tâche 2.")
+        route = notifiable.route_notification_for("mail")
+        if not route:
+            logger.warning(
+                "%s : aucun destinataire mail pour %r, canal mail ignoré.",
+                type(notification).__name__,
+                notifiable,
+            )
+            return
+        mailable = self._payload(notifiable, notification, "mail")
+        # Toujours synchrone ici : une notification en file l'est déjà par son propre job.
+        self._app.make("mail").to(route).send(mailable)
 
     def _send_database(self, notifiable, notification) -> None:
         if isinstance(notifiable, AnonymousNotifiable):
