@@ -16,6 +16,16 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 .venv/bin/ruff check . && .venv/bin/ruff format .      # la CI vérifie les deux
 ```
 
+## Documentation
+
+La documentation est dans `docs/*.md` et publiée sur https://ahoblepierre.github.io/flask-artisan/. Pour la prévisualiser :
+
+```bash
+.venv/bin/pip install -e ".[docs]" && .venv/bin/mkdocs serve
+```
+
+Une fonctionnalité met à jour sa page dans la même PR. La CI lance `mkdocs build --strict` : un lien ou une ancre cassés la font échouer.
+
 ## Conventions
 
 - Chaque changement part d'une **issue GitHub**.
