@@ -65,4 +65,5 @@ nav:
       - Événements: evenements.md
       - Mail: mail.md
       - Queues: queues.md
+      - Tâches planifiées: planification.md
   - Console: console.md

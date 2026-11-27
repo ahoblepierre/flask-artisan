@@ -17,6 +17,7 @@ from flask_artisan.providers import ServiceProvider
 from flask_artisan.queue import QueueManager
 from flask_artisan.rate_limiting import RateLimiter
 from flask_artisan.routing import Router
+from flask_artisan.scheduling import Schedule
 
 
 class Application(Flask, Container):
@@ -68,6 +69,9 @@ class Application(Flask, Container):
         limiter = RateLimiter(self)
         self.instance("limiter", limiter)
         self.instance(RateLimiter, limiter)
+        schedule = Schedule(self)
+        self.instance("schedule", schedule)
+        self.instance(Schedule, schedule)
         Application.set_instance(self)
 
         self.cli = ArtisanGroup(self.name, app=self)
