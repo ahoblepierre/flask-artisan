@@ -44,7 +44,9 @@ def test_url(disk):
     assert disk.url("a b.png").endswith("/a%20b.png")
 
 
-@pytest.mark.parametrize("path", ["../x", "/etc/passwd", "a\\b", "a//b", "a\x00", "", "a/../b"])
+@pytest.mark.parametrize(
+    "path", ["../x", "/etc/passwd", "a\\b", "a//b", "a\x00", "", "a/../b", "D:evil.txt", "a/C:x"]
+)
 def test_rejected_paths(disk, path):
     for call in (lambda: disk.put(path, "x"), lambda: disk.get(path), lambda: disk.exists(path)):
         with pytest.raises(ValueError):

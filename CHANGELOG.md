@@ -6,7 +6,7 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ### Modifié
 
-- Toute app déclare la route `GET /storage/<chemin>` (`storage.public`) du disque public, sauf avec `"serve": False` dans `config/filesystems.py` (#49).
+- Toute app déclare la route `GET /storage/<chemin>` (`storage.public`) du disque public, sauf avec `"serve": False` dans `config/filesystems.py`. Elle est ajoutée après les routes des providers : une route `/storage/...` déjà déclarée par le projet garde la priorité (#49).
 - Un échec de validation sur une requête HTML hors API (formulaire, sans en-tête `Accept` JSON) redirige en arrière au lieu de renvoyer le 422 JSON ; envoyez `Accept: application/json` ou déclarez la route dans `routes/api.py` pour garder le JSON (#19).
 - `expects_json` reconnaît aussi `X-Requested-With: XMLHttpRequest` ; le middleware `auth` répond 401 JSON sur une route de `routes/api.py` au lieu de rediriger vers `login` (#19).
 - Une `AuthorizationError` (403) sur une requête HTML hors API rend la page 403 HTML au lieu du JSON (#19).

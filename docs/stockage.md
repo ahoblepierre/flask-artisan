@@ -37,6 +37,8 @@ AWS_SECRET_ACCESS_KEY=...
 
 Sans clé ni secret, `boto3` utilise sa propre chaîne d'identifiants (variables d'environnement, rôle IAM). La clé `root` de la config préfixe toutes les clés du bucket.
 
+Droits IAM nécessaires : `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` et `s3:ListBucket`. Sans `ListBucket`, S3 répond 403 au lieu de 404 pour un fichier absent, et `exists()`, `missing()` et `delete()` lèvent une erreur au lieu de renvoyer `False`.
+
 ## API
 
 Les chemins sont relatifs à la racine du disque, avec `/` comme séparateur.
@@ -120,6 +122,8 @@ Un fichier envoyé par un utilisateur ne doit jamais s'exécuter comme une page 
 
 Sur S3, `put` pose les mêmes protections dans les métadonnées de l'objet (`ContentType` et `ContentDisposition: attachment` hors de cette liste), puisque le bucket ou le CDN sert le fichier sans passer par l'app.
 
+Si le projet déclare lui-même une route sur la même URL (`/storage/<path:…>`), c'est la sienne qui répond : la route du framework est ajoutée après celles des providers.
+
 Pour qu'un disque `local` soit servi, sa config doit avoir `"serve": True` et une `url` relative (`"/storage"`). Avec `"serve": False`, il n'y a pas de route.
 
 ### En production : nginx
@@ -127,13 +131,22 @@ Pour qu'un disque `local` soit servi, sa config doit avoir `"serve": True` et un
 La route Flask suffit, mais nginx sert les fichiers plus vite :
 
 ```nginx
-location /storage/ {
-    alias /chemin/du/projet/storage/app/public/;
-    add_header X-Content-Type-Options nosniff;
-    # nginx ne pose pas la pièce jointe pour les types non sûrs :
-    location ~* \.(html?|svg|js|xml)$ { add_header Content-Disposition attachment; add_header X-Content-Type-Options nosniff; }
+# Pièce jointe par défaut ; en ligne seulement pour la même liste que la route.
+map $uri $storage_disposition {
+    default attachment;
+    ~*\.(png|jpe?g|gif|webp|avif|pdf|txt|mp3|m4a|ogg|oga|wav|mp4|webm|ogv|mov)$ "";
+}
+
+server {
+    location /storage/ {
+        alias /chemin/du/projet/storage/app/public/;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Content-Disposition $storage_disposition always;   # vide : en-tête non envoyé
+    }
 }
 ```
+
+Gardez une liste blanche, comme ici : une liste d'extensions interdites oublie toujours un type qui exécute du script (`.xhtml`, `.mht`…). Les fichiers sont écrits avec les droits `0644`, lisibles par l'utilisateur de nginx.
 
 ## Tester
 

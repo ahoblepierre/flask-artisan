@@ -128,10 +128,11 @@ class Application(Flask, Container):
         # Les routes déclarées pendant les boot() sont poussées dans Flask à la fin.
         router = self.make(Router)
         with router.collecting():
-            for disk, url in served_disks(self).items():
-                router.get(f"{url}/<path:path>", serve_view(disk)).name(f"storage.{disk}")
             for provider in list(self._providers.values()):
                 provider.boot()
+            # Après les providers : une route /storage/... du projet, déclarée avant, gagne.
+            for disk, url in served_disks(self).items():
+                router.get(f"{url}/<path:path>", serve_view(disk)).name(f"storage.{disk}")
 
     def base_path(self, path: str = "") -> Path:
         return self._base_path / path

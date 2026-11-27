@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from flask_artisan import Storage
@@ -59,3 +61,17 @@ def test_fake_context_manager(app):
 def test_defaults_without_config(app):
     assert Storage.disk("public").url("x") == "/storage/x"
     assert Storage.disk().root == app.base_path("storage/app/private").resolve()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="droits POSIX")
+def test_local_files_readable_by_web_server(configured, tmp_path):
+    Storage.disk("public").put("a.txt", "1")
+    assert (tmp_path / "public" / "a.txt").stat().st_mode & 0o777 == 0o644
+
+
+def test_s3_client_reused(app):
+    pytest.importorskip("boto3")
+    app.make("config").set(
+        "filesystems.disks", {"s3": {"driver": "s3", "bucket": "bucket", "region": "eu-west-3"}}
+    )
+    assert Storage.disk("s3").client is Storage.disk("s3").client

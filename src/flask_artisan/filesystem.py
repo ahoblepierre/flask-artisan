@@ -6,6 +6,7 @@ import os
 import secrets
 import shutil
 import tempfile
+import threading
 from pathlib import Path
 from urllib.parse import quote
 
@@ -49,7 +50,8 @@ def _clean(path, allow_empty: bool = False) -> str:
         raise ValueError(f"Chemin invalide : {path!r}.")  # noqa: TRY004 (même erreur pour tout chemin refusé)
     if path == "" and allow_empty:
         return ""
-    if "\\" in path or "\x00" in path or path.startswith("/"):
+    # ":" : une lettre de lecteur Windows (D:x) ferait sortir de la racine du disque.
+    if "\\" in path or "\x00" in path or ":" in path or path.startswith("/"):
         raise ValueError(f"Chemin refusé : {path!r}.")
     if any(part in ("", ".", "..") for part in path.split("/")):
         raise ValueError(f"Chemin refusé : {path!r}.")
@@ -151,6 +153,7 @@ class LocalDisk(Disk):
         try:
             with os.fdopen(fd, "wb") as f:
                 f.write(data)
+            os.chmod(tmp, 0o644)  # mkstemp crée en 0600 : nginx (autre utilisateur) doit lire
             os.replace(tmp, full)  # écriture atomique : jamais de fichier à moitié écrit
         except BaseException:
             Path(tmp).unlink(missing_ok=True)
@@ -214,6 +217,7 @@ class S3Disk(Disk):
         endpoint: str | None = None,
         url: str | None = None,
         root: str = "",
+        client=None,
     ):
         self.bucket = bucket
         self.region = region or "us-east-1"
@@ -221,7 +225,7 @@ class S3Disk(Disk):
         self._endpoint = endpoint or None
         self._url = url or None
         self._root = root.strip("/")
-        self._client = None
+        self._client = client
 
     @property
     def client(self):
@@ -234,7 +238,8 @@ class S3Disk(Disk):
                 ) from None
             key, secret = self._credentials
             # Sans clé ni secret : la chaîne d'identifiants de boto3 (variables, rôle IAM).
-            self._client = boto3.client(
+            # Session dédiée : la session par défaut de boto3 n'est pas thread-safe.
+            self._client = boto3.session.Session().client(
                 "s3",
                 region_name=self.region,
                 endpoint_url=self._endpoint,
@@ -333,6 +338,8 @@ class FilesystemManager:
     def __init__(self, app):
         self._app = app
         self._fakes: dict[str, FakeDisk] = {}
+        self._s3_clients: dict[tuple, object] = {}
+        self._lock = threading.Lock()
 
     def _config(self, key: str, default=None):
         return self._app.make("config").get(f"filesystems.{key}", default)
@@ -358,7 +365,7 @@ class FilesystemManager:
                 root if root.is_absolute() else self._app.base_path(str(root)), options.get("url")
             )
         if driver == "s3":
-            return S3Disk(
+            disk = S3Disk(
                 options.get("bucket"),
                 options.get("region"),
                 options.get("key"),
@@ -367,6 +374,13 @@ class FilesystemManager:
                 options.get("url"),
                 options.get("root", ""),
             )
+            # Un client par configuration, réutilisé : pool de connexions, pas de TLS par appel.
+            ident = (disk.region, disk._endpoint, *disk._credentials)
+            with self._lock:
+                if ident not in self._s3_clients:
+                    self._s3_clients[ident] = disk.client
+                disk._client = self._s3_clients[ident]
+            return disk
         raise ValueError(f"Pilote de disque inconnu : {driver!r} (disque {name!r}).")
 
     def fake(self, name: str | None = None) -> FakeDisk:

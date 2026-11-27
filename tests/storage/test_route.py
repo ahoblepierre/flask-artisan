@@ -65,3 +65,23 @@ def test_no_route_without_serve(make_project, tmp_path):
     app = make_app(make_project, tmp_path, serve=False)
     app.test_client().get("/storage/x").assert_status(404)
     assert "storage.public" not in app.view_functions
+
+
+MINE = """
+from flask_artisan import Route
+from flask_artisan.providers import ServiceProvider
+
+
+def mine(p):
+    return "mine"
+
+
+class Mine(ServiceProvider):
+    def boot(self):
+        Route.get("/storage/<path:p>", mine)
+"""
+
+
+def test_project_storage_route_wins(make_project):
+    app = Application(make_project(providers="[Mine]", extra=MINE))
+    assert app.test_client().get("/storage/hello.txt").data == b"mine"
