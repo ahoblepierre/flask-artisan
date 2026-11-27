@@ -41,6 +41,7 @@ flask-artisan = "flask_artisan.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/ahoblepierre/flask-artisan"
+Documentation = "https://ahoblepierre.github.io/flask-artisan/"
 Issues = "https://github.com/ahoblepierre/flask-artisan/issues"
 Changelog = "https://github.com/ahoblepierre/flask-artisan/blob/main/CHANGELOG.md"
 
