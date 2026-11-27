@@ -4,6 +4,8 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ## [Non publié]
 
+## [0.10.0] - 2026-11-27
+
 ### Ajouté
 
 - `flask auth:install` : inscription, mot de passe oublié et vérification de l'e-mail copiés dans le projet (routes, controllers, FormRequests, vues, tests). Ne modifie jamais un fichier existant (#59).
@@ -16,6 +18,7 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ### Modifié
 
+- Squelette : le projet généré dépend de `flask-artisan>=0.10,<0.11`.
 - `RouteServiceProvider` charge désormais `routes/auth.py` s'il existe : un projet qui chargeait déjà ce fichier lui-même (depuis `routes/web.py` ou son propre provider) doit retirer ce chargement, sinon ses routes sont déclarées deux fois (#59).
 
 ## [0.9.0] - 2026-11-27
@@ -137,6 +140,7 @@ Première version publique.
 - **Auth** : façade `Auth` (`attempt`, `validate`, `login`, `logout`, `user`…), guards session et token (tokens d'API en base façon Sanctum), hash automatique du mot de passe, middleware `auth` / `auth:api`, routes `/api/login`, `/api/user`, `/api/logout` dans le squelette.
 - **Console** : `flask make:controller|model|middleware|provider|command`, commandes du projet découvertes dans `app/console/commands/`, `flask route:list`.
 
+[0.10.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.10.0
 [0.9.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.9.0
 [0.8.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.8.0
 [0.7.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.7.0
