@@ -1,0 +1,170 @@
+from urllib.parse import urlsplit
+
+import pytest
+from app.models.user import User
+from wsgi import app
+
+from flask_artisan.auth import MustVerifyEmail
+from flask_artisan.auth.notifications import ResetPassword, VerifyEmail, verification_url
+from flask_artisan.notifications import Notification
+
+# Installé par flask auth:install.
+needs_verification = pytest.mark.skipif(
+    not issubclass(User, MustVerifyEmail),
+    reason="Ajoutez MustVerifyEmail à User (étape 1 de flask auth:install).",
+)
+
+ADA = {
+    "name": "Ada",
+    "email": "ada@example.org",
+    "password": "correct-horse",
+    "password_confirmation": "correct-horse",
+}
+
+
+@pytest.fixture
+def fake():
+    with Notification.fake() as fake:
+        yield fake
+
+
+@pytest.fixture
+def ada(client):
+    with app.app_context():
+        return User.create(name="Ada", email="ada@example.org", password="old-secret")
+
+
+def fresh(user):
+    with app.app_context():
+        return User.find(user.id)
+
+
+def registered(client) -> User:
+    client.post("/register", data=ADA).assert_redirect("/dashboard")
+    with app.app_context():
+        return User.where("email", "ada@example.org").first()
+
+
+def link(user) -> str:
+    with app.test_request_context():
+        parts = urlsplit(verification_url(user))
+    return f"{parts.path}?{parts.query}"
+
+
+def test_register_creates_user_and_logs_in(client, fake):
+    user = registered(client)
+    assert user.check_password("correct-horse")
+    client.get("/dashboard").assert_ok()
+
+
+def test_register_validates_input(client, fake, ada):
+    data = {**ADA, "password_confirmation": "other"}
+    client.post("/register", data=data, headers={"Referer": "http://localhost/register"})
+    page = client.get("/register").get_data(as_text=True)
+    assert "has already been taken" in page
+    assert "confirmation does not match" in page
+
+
+def test_forgot_password_sends_link(client, fake, ada):
+    client.post("/forgot-password", data={"email": "ada@example.org"}).assert_redirect(
+        "/forgot-password"
+    )
+    fake.assert_sent_to(ada, ResetPassword)
+    assert "Si un compte existe" in client.get("/forgot-password").get_data(as_text=True)
+
+
+def test_forgot_password_same_message_for_unknown_email(client, fake):
+    client.post("/forgot-password", data={"email": "nobody@example.org"})
+    fake.assert_nothing_sent()
+    assert "Si un compte existe" in client.get("/forgot-password").get_data(as_text=True)
+
+
+def test_reset_password_with_emailed_token(client, fake, ada):
+    client.post("/forgot-password", data={"email": "ada@example.org"})
+    [(_, notification, _)] = fake.sent(ResetPassword)
+    page = client.get(f"/reset-password/{notification.token}?email=ada@example.org")
+    assert 'value="ada@example.org"' in page.get_data(as_text=True)
+    data = {
+        "token": notification.token,
+        "email": "ada@example.org",
+        "password": "new-secret",
+        "password_confirmation": "new-secret",
+    }
+    client.post("/reset-password", data=data).assert_redirect("/login")
+    assert fresh(ada).check_password("new-secret")
+
+
+def test_reset_password_rejects_bad_token(client, fake, ada):
+    data = {
+        "token": "wrong",
+        "email": "ada@example.org",
+        "password": "new-secret",
+        "password_confirmation": "new-secret",
+    }
+    client.post("/reset-password", data=data, headers={"Referer": "http://localhost/login"})
+    assert "invalide ou a expiré" in client.get("/login").get_data(as_text=True)
+    assert fresh(ada).check_password("old-secret")
+
+
+@needs_verification
+def test_register_sends_verification(client, fake):
+    user = registered(client)
+    fake.assert_sent_to(user, VerifyEmail)
+    client.get("/verify-email").assert_ok()
+
+
+@needs_verification
+def test_verify_link_marks_email_verified(client, fake):
+    user = registered(client)
+    client.get(link(user)).assert_redirect("/dashboard")
+    assert fresh(user).has_verified_email()
+    client.get("/verify-email").assert_redirect("/dashboard")
+
+
+@needs_verification
+def test_verify_link_of_other_user_is_forbidden(client, fake):
+    user = registered(client)
+    with app.app_context():
+        bob = User.create(name="Bob", email="bob@example.org", password="secret")
+    assert client.get(link(bob)).status_code == 403
+    assert not fresh(bob).has_verified_email()
+    assert not fresh(user).has_verified_email()
+
+
+@needs_verification
+def test_verify_link_after_email_change_is_forbidden(client, fake):
+    user = registered(client)
+    url = link(user)
+    with app.app_context():
+        changed = User.find(user.id)
+        changed.email = "ada@new.example.org"
+        changed.save()
+    assert client.get(url).status_code == 403
+    assert not fresh(user).has_verified_email()
+
+
+@needs_verification
+def test_tampered_verify_link_is_forbidden(client, fake):
+    user = registered(client)
+    assert client.get(link(user).replace("expires=", "expires=9")).status_code == 403
+    assert not fresh(user).has_verified_email()
+
+
+@needs_verification
+def test_resend_verification(client, fake):
+    user = registered(client)
+    client.post("/email/verification-notification").assert_redirect("/verify-email")
+    fake.assert_sent_times(VerifyEmail, 2)
+    assert fresh(user) is not None
+
+
+@needs_verification
+def test_register_survives_mail_failure(client, fake, monkeypatch):
+    def broken(self):
+        raise ConnectionError("SMTP indisponible")
+
+    monkeypatch.setattr(User, "send_email_verification_notification", broken)
+    user = registered(client)
+    page = client.get("/verify-email").assert_ok().get_data(as_text=True)
+    assert "Renvoyer le lien" in page
+    assert user is not None

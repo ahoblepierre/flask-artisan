@@ -23,6 +23,7 @@ from flask_artisan.middleware import HttpKernel, Middleware
 from flask_artisan.providers import ServiceProvider
 from flask_artisan.route_provider import RouteServiceProvider
 from flask_artisan.routing import RouteError, Router
+from flask_artisan.signing import ValidateSignature, signed_url
 
 __version__ = "0.9.0"
 
@@ -50,6 +51,7 @@ __all__ = [
     "Schedule",
     "ServiceProvider",
     "Storage",
+    "ValidateSignature",
     "VerifyCsrfToken",
     "__version__",
     "app",
@@ -58,4 +60,5 @@ __all__ = [
     "dispatch",
     "env",
     "event",
+    "signed_url",
 ]

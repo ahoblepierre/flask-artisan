@@ -27,6 +27,17 @@ class Authenticatable:
     def check_password(self, plain: str) -> bool:
         return self.password is not None and check_password_hash(self.password, plain)
 
+    def send_password_reset_notification(self, token: str) -> None:
+        """Envoie le lien de réinitialisation ; à redéfinir pour changer de mail."""
+        if not callable(getattr(self, "notify", None)):
+            raise TypeError(
+                f"{type(self).__name__} doit hériter de Notifiable pour recevoir le lien "
+                "de réinitialisation."
+            )
+        from flask_artisan.auth.notifications import ResetPassword
+
+        self.notify(ResetPassword(token))
+
 
 class HasApiTokens:
     """Mixin d'utilisateur : tokens d'API stockés en base (`personal_access_tokens`)."""

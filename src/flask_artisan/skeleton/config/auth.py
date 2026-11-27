@@ -10,4 +10,8 @@ config = {
         "api": {"driver": "token"},
     },
     "model": User,
+    # flask auth:install : durée de validité des liens (minutes) et délai entre deux
+    # demandes de réinitialisation pour un même e-mail (secondes).
+    "passwords": {"expire": 60, "throttle": 60},
+    "verification": {"expire": 60},
 }

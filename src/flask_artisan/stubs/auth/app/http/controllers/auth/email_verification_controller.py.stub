@@ -1,0 +1,39 @@
+import hashlib
+import hmac
+
+from flask import abort, flash, redirect, render_template, url_for
+
+from flask_artisan import Auth
+from flask_artisan.auth import MustVerifyEmail
+
+
+def verified(user) -> bool:
+    # Un User sans MustVerifyEmail n'a rien à vérifier.
+    return not isinstance(user, MustVerifyEmail) or user.has_verified_email()
+
+
+class EmailVerificationController:
+    """Vérification de l'e-mail (User avec MustVerifyEmail)."""
+
+    def notice(self):
+        if verified(Auth.user()):
+            return redirect(url_for("dashboard"))
+        return render_template("auth/verify_email.html")
+
+    def verify(self, id: int, hash: str):
+        user = Auth.user()
+        expected = hashlib.sha1(user.email.encode()).hexdigest()
+        if id != user.id or not hmac.compare_digest(hash, expected):
+            abort(403)
+        if not verified(user):
+            user.mark_email_as_verified()
+        flash("Adresse e-mail vérifiée.")
+        return redirect(url_for("dashboard"))
+
+    def send(self):
+        user = Auth.user()
+        if verified(user):
+            return redirect(url_for("dashboard"))
+        user.send_email_verification_notification()
+        flash("Un nouveau lien de vérification vient d'être envoyé.")
+        return redirect(url_for("verification.notice"))

@@ -289,7 +289,7 @@ def _commit(db) -> None:
         raise
 
 
-TIMESTAMPS = ("created_at", "updated_at", "deleted_at")
+TIMESTAMPS = ("created_at", "updated_at", "deleted_at", "email_verified_at")
 
 
 @event.listens_for(Model, "load", propagate=True)

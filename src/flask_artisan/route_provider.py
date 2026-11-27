@@ -4,7 +4,7 @@ from flask_artisan.routing import Router
 
 
 class RouteServiceProvider(ServiceProvider):
-    """Branche le kernel HTTP et charge routes/web.py et routes/api.py."""
+    """Branche le kernel HTTP et charge routes/web.py, routes/auth.py et routes/api.py."""
 
     kernel: type[HttpKernel] = HttpKernel
     api_prefix = "/api"
@@ -16,6 +16,8 @@ class RouteServiceProvider(ServiceProvider):
     def boot(self):
         router = self.app.make(Router)
         router.load(self.app.base_path("routes/web.py"), middleware=self._group("web"))
+        # Créé par flask auth:install ; ignoré s'il n'existe pas.
+        router.load(self.app.base_path("routes/auth.py"), middleware=self._group("web"))
         router.load(
             self.app.base_path("routes/api.py"),
             prefix=self.api_prefix,

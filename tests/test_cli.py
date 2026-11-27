@@ -383,3 +383,32 @@ def test_generated_project_notifications(project):
         assert result.returncode == 0, result.stdout + result.stderr
     out = run(project, "-c", NOTIFICATION_FLOW)
     assert out.stdout.strip() == "OK", out.stdout + out.stderr
+
+
+def test_generated_project_auth_install(project):
+    def ok(*args):
+        result = run(project, *args)
+        assert result.returncode == 0, result.stdout + result.stderr
+        return result.stdout
+
+    ok("-m", "flask", "auth:install")
+    assert "skipped" in ok("-m", "pytest", "-q", "-p", "no:cacheprovider")
+
+    user = project / "app" / "models" / "user.py"
+    source = user.read_text()
+    source = source.replace(
+        "from flask_artisan.auth import Authenticatable, HasApiTokens",
+        "from flask_artisan.auth import Authenticatable, HasApiTokens, MustVerifyEmail",
+    ).replace("class User(Authenticatable,", "class User(MustVerifyEmail, Authenticatable,")
+    assert "MustVerifyEmail, Authenticatable" in source
+    user.write_text(source)
+    assert "skipped" not in ok("-m", "pytest", "-q", "-p", "no:cacheprovider")
+
+    ok("-m", "flask", "make:migration", "auth install")
+    [migration] = (project / "database" / "migrations").glob("*auth_install*.py")
+    text = migration.read_text()
+    assert "password_reset_tokens" in text and "email_verified_at" in text
+    ok("-m", "flask", "migrate")
+
+    again = run(project, "-m", "flask", "auth:install")
+    assert again.returncode == 1

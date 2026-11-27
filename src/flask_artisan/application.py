@@ -37,10 +37,15 @@ class Application(Flask, Container):
             root_path=str(base),
             instance_path=str(base / "instance"),
         )
-        # Vues de Laravel d'abord, puis le dossier de Flask ; affecté à l'instance (pas de
-        # redéfinition de Flask.jinja_loader dans la classe).
+        # Vues de Laravel d'abord, puis le dossier de Flask, puis les vues du framework (mails
+        # d'auth, surchargeables par le projet) ; affecté à l'instance (pas de redéfinition de
+        # Flask.jinja_loader dans la classe).
         self.jinja_loader = ChoiceLoader(
-            [FileSystemLoader(base / "resources" / "views"), FileSystemLoader(base / "templates")]
+            [
+                FileSystemLoader(base / "resources" / "views"),
+                FileSystemLoader(base / "templates"),
+                FileSystemLoader(Path(__file__).parent / "resources" / "views"),
+            ]
         )
         self.test_client_class = TestClient  # à l'instance, comme jinja_loader
         self.before_request(age_flash)
