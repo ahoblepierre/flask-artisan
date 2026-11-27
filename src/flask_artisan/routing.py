@@ -6,10 +6,16 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from flask import request
+from flask import redirect, request, session
+from werkzeug.exceptions import Forbidden
 
-from flask_artisan.middleware import HttpKernel, resolve
+from flask_artisan.middleware import HttpKernel, expects_json, resolve
 from flask_artisan.validation import AuthorizationError, ValidationError
+
+# Jamais gardés en session pour old() (comme dontFlash de Laravel).
+DONT_FLASH = {"password", "password_confirmation", "current_password", "_token"}
+# Au-delà, une saisie n'est pas flashée : la session est un cookie d'environ 4 Ko.
+MAX_OLD_LENGTH = 1000
 
 
 class RouteError(Exception):
@@ -26,6 +32,7 @@ class PendingRoute:
         self.name_prefix = name_prefix
         self.endpoint_name: str | None = None
         self.middleware_stack: list = []
+        self.json = False  # route d'API : erreurs toujours en JSON, jamais de redirection
 
     def name(self, name: str) -> "PendingRoute":
         self.endpoint_name = self.name_prefix + name
@@ -39,8 +46,11 @@ class PendingRoute:
 class RouteGroup:
     """Attributs partagés par les routes déclarées dans un bloc `with`."""
 
-    def __init__(self, router: "Router", prefix: str = "", name: str = "", middleware=()):
+    def __init__(
+        self, router: "Router", prefix: str = "", name: str = "", middleware=(), json=False
+    ):
         self._router = router
+        self._json = json
         self._prefix = prefix
         self._name = name
         self._middleware = list(middleware)
@@ -103,14 +113,14 @@ class Router:
     def group(self, prefix: str = "", middleware=(), name: str = "") -> RouteGroup:
         return RouteGroup(self, prefix=prefix, name=name, middleware=middleware)
 
-    def load(self, path: Path, prefix: str = "", middleware=()) -> None:
+    def load(self, path: Path, prefix: str = "", middleware=(), json: bool = False) -> None:
         """Exécute un fichier de routes dans un groupe ; un fichier absent est ignoré."""
         path = Path(path)
         if not path.exists():
             return
         spec = importlib.util.spec_from_file_location(f"flask_artisan_routes_{path.stem}", path)
         module = importlib.util.module_from_spec(spec)
-        with self.group(prefix=prefix, middleware=middleware):
+        with RouteGroup(self, prefix=prefix, middleware=middleware, json=json):
             try:
                 spec.loader.exec_module(module)
             except Exception as exc:
@@ -184,6 +194,7 @@ class Router:
         name_prefix = "".join(g._name for g in self._groups)
         route = PendingRoute(rule, methods, _resolve_handler(rule, handler), name_prefix)
         route.middleware_stack = [m for g in self._groups for m in g._middleware]
+        route.json = any(g._json for g in self._groups)
         self._pending.append(route)
         return route
 
@@ -221,7 +232,11 @@ class Router:
                         rv = app.call(fn, **values)
                     except (ValidationError, AuthorizationError) as exc:
                         # Réponse rendue ici pour que les middlewares la voient (comme Laravel).
-                        return exc.get_response()
+                        if route.json or expects_json(req):
+                            return exc.get_response()
+                        if isinstance(exc, AuthorizationError):
+                            return Forbidden().get_response()
+                        return _redirect_back(req, exc.errors)
                     return app.make_response(_jsonable(app, rv))
                 middleware, params = stack[i]
                 # make_response : un middleware peut renvoyer un dict ou un tuple comme une vue.
@@ -232,6 +247,20 @@ class Router:
             return run(0, request._get_current_object())
 
         return view
+
+
+def _redirect_back(req, errors: dict):
+    """Erreurs et saisies flashées pour la requête suivante, retour à la page précédente."""
+    data = {**req.args.to_dict(), **req.form.to_dict()}
+    session["_flash_errors"] = errors
+    session["_flash_old"] = {
+        k: v
+        for k, v in data.items()
+        if k not in DONT_FLASH and isinstance(v, str) and len(v) <= MAX_OLD_LENGTH
+    }
+    referrer = req.referrer or ""
+    # Même site seulement : jamais de redirection ouverte.
+    return redirect(referrer if referrer.startswith(req.host_url) else "/", 302)
 
 
 def _jsonable(app, rv: Any) -> Any:

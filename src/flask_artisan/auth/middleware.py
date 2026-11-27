@@ -2,14 +2,9 @@ from flask import current_app, redirect, url_for
 from werkzeug.routing import BuildError
 
 from flask_artisan.auth.manager import AuthManager, TokenGuard
-from flask_artisan.middleware import Middleware
+from flask_artisan.middleware import Middleware, expects_json
 
 UNAUTHENTICATED = ({"message": "Unauthenticated."}, 401)
-
-
-def expects_json(request) -> bool:
-    # Type préféré seulement : un `*/*` (curl, navigateurs) ne réclame pas du JSON.
-    return request.is_json or "json" in (request.accept_mimetypes.best or "")
 
 
 class Authenticate(Middleware):

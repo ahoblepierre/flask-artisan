@@ -101,3 +101,15 @@ def test_kernel_without_api_group_still_boots(make_project):
     (base / "routes").mkdir()
     (base / "routes" / "api.py").write_text(ROUTE_FILE.format('Route.get("/ping", ping)'))
     assert Application(base).test_client().get("/api/ping").status_code == 200
+
+
+def test_api_provider_marks_json(make_project):
+    from flask_artisan.routing import Router
+
+    base = project(
+        make_project,
+        web=ROUTE_FILE.format('Route.get("/", ping)'),
+        api=ROUTE_FILE.format('Route.get("/ping", ping)'),
+    )
+    flags = {route.rule: route.json for route, _, _ in Application(base).make(Router).registered}
+    assert flags == {"/": False, "/api/ping": True}

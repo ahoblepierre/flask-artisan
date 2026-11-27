@@ -20,6 +20,7 @@ class RouteServiceProvider(ServiceProvider):
             self.app.base_path("routes/api.py"),
             prefix=self.api_prefix,
             middleware=self._group("api"),
+            json=True,
         )
 
     def _group(self, name: str) -> tuple:
