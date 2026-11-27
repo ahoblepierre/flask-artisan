@@ -6,6 +6,7 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ### Ajouté
 
+- **Tâches planifiées** : `routes/console.py` avec la façade `Schedule` (`command`, `job`, `call`), fréquences (`cron`, `every_five_minutes`, `hourly`, `daily_at`, `weekly_on`, `monthly_on`, `weekdays`…), `timezone`, `without_overlapping`, `on_one_server`, `due_events` pour les tests ; commandes `flask schedule:run`, `schedule:work`, `schedule:list` ; config `app.timezone` (`APP_TIMEZONE`, défaut UTC) (#42).
 - Site de documentation (MkDocs Material, publié sur GitHub Pages) : https://ahoblepierre.github.io/flask-artisan/ ; le README est raccourci et renvoie vers le site (#40).
 
 ## [0.7.0] - 2026-11-26

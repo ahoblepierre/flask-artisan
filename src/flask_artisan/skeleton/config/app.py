@@ -11,6 +11,8 @@ config = {
     "env": env("APP_ENV", "production"),
     "debug": env("APP_DEBUG", False),
     "key": env("APP_KEY", ""),
+    # Fuseau des tâches planifiées (routes/console.py) : nom IANA, ex. "Europe/Paris".
+    "timezone": env("APP_TIMEZONE", "UTC"),
     # Nombre de proxys devant l'app (nginx, load balancer) : l'IP du client est lue dans
     # X-Forwarded-For. 0 sans proxy, sinon un client pourrait falsifier son IP.
     "trusted_proxies": env("TRUSTED_PROXIES", 0),

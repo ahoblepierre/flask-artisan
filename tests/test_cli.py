@@ -320,3 +320,14 @@ def test_generated_project_cache_flow(project):
     result = run(project, "-m", "flask", "cache:clear")
     assert result.returncode == 0, result.stdout + result.stderr
     assert list(cache_dir.iterdir()) == []
+
+
+def test_generated_project_schedule(project):
+    assert "APP_TIMEZONE=UTC" in (project / ".env").read_text().splitlines()
+    assert "Schedule" in (project / "routes" / "console.py").read_text()
+    result = run(project, "-m", "flask", "schedule:list")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Aucune tâche planifiée." in result.stdout
+    result = run(project, "-m", "flask", "schedule:run")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Aucune tâche planifiée à exécuter." in result.stdout
