@@ -5,8 +5,9 @@ import importlib.util
 import inspect
 import re
 import shlex
+import time
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -219,6 +220,29 @@ class Event:
         key = self.expression + (self.tz or default_tz) + self.description
         return hashlib.sha1(key.encode()).hexdigest()
 
+    def next_run(self, after: datetime, default_tz: str) -> datetime | None:
+        """Prochaine minute due, strictement après `after`, dans le fuseau de la tâche ; None
+        au-delà de 366 jours."""
+        tz = zone(self.tz or default_tz, "timezone")
+        cron = self._cron
+        start = after.astimezone(tz).replace(second=0, microsecond=0, tzinfo=None)
+        moment = start + timedelta(minutes=1)
+        limit = start + timedelta(days=366)
+        while moment <= limit:
+            if not (cron.matches_month(moment) and cron.matches_day(moment)):
+                moment = (moment + timedelta(days=1)).replace(hour=0, minute=0)
+            elif not cron.matches_hour(moment):
+                moment = (moment + timedelta(hours=1)).replace(minute=0)
+            elif not cron.matches(moment):
+                moment += timedelta(minutes=1)
+            else:
+                local = moment.replace(tzinfo=tz)
+                # Heure inexistante (passage à l'heure d'été) : l'aller-retour UTC la décale.
+                if local.astimezone(timezone.utc).astimezone(tz).replace(tzinfo=None) == moment:
+                    return local
+                moment += timedelta(minutes=1)
+        return None
+
     def is_due(self, now: datetime, default_tz: str) -> bool:
         local = now.astimezone(zone(self.tz or default_tz, "timezone"))
         return self._cron.matches(local.replace(second=0, microsecond=0, tzinfo=None))
@@ -356,6 +380,10 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _sleep(seconds: float) -> None:
+    time.sleep(seconds)
+
+
 def _schedule():
     schedule = current_app.make("schedule")
     schedule.load(current_app.base_path("routes/console.py"))
@@ -370,4 +398,42 @@ def schedule_run():
         raise SystemExit(1)
 
 
-COMMANDS = [schedule_run]
+@click.command("schedule:work")
+@with_appcontext
+def schedule_work():
+    """Exécute les tâches dues chaque minute, sans cron (Ctrl+C pour arrêter)."""
+    app = current_app._get_current_object()
+    schedule = _schedule()
+    click.echo("Planificateur démarré (Ctrl+C pour arrêter).")
+    try:
+        while True:
+            now = _now()
+            _sleep(60 - now.second - now.microsecond / 1_000_000)
+            # Un contexte neuf par minute : sa fin retire la session de base de données.
+            with app.app_context():
+                schedule.run_due(_now(), click.echo)
+    except KeyboardInterrupt:
+        click.echo("Planificateur arrêté.")
+
+
+@click.command("schedule:list")
+@with_appcontext
+def schedule_list():
+    """Liste les tâches planifiées et leur prochaine exécution."""
+    schedule = _schedule()
+    events = schedule.events()
+    if not events:
+        click.echo("Aucune tâche planifiée.")
+        return
+    default, now = schedule.timezone(), _now()
+    rows = [("Expression", "Prochaine exécution", "Tâche")]
+    for event in events:
+        upcoming = event.next_run(now, default)
+        shown = f"{upcoming:%Y-%m-%d %H:%M} ({event.tz or default})" if upcoming else "—"
+        rows.append((event.expression, shown, event.description))
+    widths = [max(len(row[i]) for row in rows) for i in range(2)]
+    for expression, shown, name in rows:
+        click.echo(f"{expression.ljust(widths[0])}   {shown.ljust(widths[1])}   {name}")
+
+
+COMMANDS = [schedule_run, schedule_work, schedule_list]
