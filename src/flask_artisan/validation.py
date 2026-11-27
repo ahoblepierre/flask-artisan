@@ -346,6 +346,14 @@ def _check_params(name: str, params: list[str], field: str) -> None:
             raise ValueError(
                 f"La règle '{name}' du champ '{field}' attend des nombres : {params}."
             ) from None
+    if name == "regex":
+        try:
+            re.compile(params[0])
+        except re.error as exc:
+            # Dès la construction : sinon une erreur 500 au premier champ envoyé, en production.
+            raise ValueError(
+                f"La règle 'regex' du champ '{field}' a un motif invalide : {exc}."
+            ) from None
     if name in ("unique", "exists"):
         names = [params[0], _db_column(params, field)]
         if name == "unique" and len(params) > 3 and params[3]:
