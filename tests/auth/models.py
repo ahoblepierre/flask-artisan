@@ -18,3 +18,9 @@ class PwUser(Authenticatable, Notifiable, Model):
     email: Mapped[str | None]
     password: Mapped[str | None]
     fillable = ["email", "password"]
+
+
+class PwTokenUser(Authenticatable, HasApiTokens, Notifiable, Model):
+    email: Mapped[str | None]
+    password: Mapped[str | None]
+    fillable = ["email", "password"]
