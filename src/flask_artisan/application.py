@@ -12,7 +12,7 @@ from flask_artisan.console import COMMANDS, ArtisanGroup
 from flask_artisan.container import Container
 from flask_artisan.env import load_env_file
 from flask_artisan.events import Dispatcher
-from flask_artisan.filesystem import FilesystemManager
+from flask_artisan.filesystem import FilesystemManager, serve_view, served_disks
 from flask_artisan.mail import Mailer
 from flask_artisan.providers import ServiceProvider
 from flask_artisan.queue import QueueManager
@@ -126,7 +126,10 @@ class Application(Flask, Container):
             return
         self._booted = True
         # Les routes déclarées pendant les boot() sont poussées dans Flask à la fin.
-        with self.make(Router).collecting():
+        router = self.make(Router)
+        with router.collecting():
+            for disk, url in served_disks(self).items():
+                router.get(f"{url}/<path:path>", serve_view(disk)).name(f"storage.{disk}")
             for provider in list(self._providers.values()):
                 provider.boot()
 

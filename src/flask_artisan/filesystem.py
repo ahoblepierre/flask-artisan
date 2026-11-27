@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
-from flask import send_file
+from flask import abort, current_app, send_file, send_from_directory
 from werkzeug.utils import secure_filename
 
 # Types servis « en ligne » (route du disque public, objets S3). Tout autre type, dont
@@ -386,3 +386,38 @@ class FilesystemManager:
         if name in PUBLIC:
             return getattr(self.disk(), name)
         raise AttributeError(name)
+
+
+def serve(disk_name: str, path: str):
+    """Vue de la route d'un disque servi : nosniff, types non sûrs en pièce jointe."""
+    disk = current_app.make("filesystem").disk(disk_name)  # à chaque requête : fake compris
+    try:
+        path = _clean(path)
+    except ValueError:
+        abort(404)
+    if not isinstance(disk, LocalDisk):
+        abort(404)
+    response = send_from_directory(disk.root, path)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    if not is_inline(guess_type(path)):
+        response.headers["Content-Disposition"] = "attachment"
+    return response
+
+
+def served_disks(app) -> dict[str, str]:
+    """{nom: url} des disques local avec `serve` et une URL relative (route /storage/…)."""
+    disks = app.make("config").get("filesystems.disks", DEFAULT_DISKS)
+    return {
+        name: options["url"].rstrip("/")
+        for name, options in disks.items()
+        if options.get("driver") == "local"
+        and options.get("serve")
+        and str(options.get("url", "")).startswith("/")
+    }
+
+
+def serve_view(disk_name: str):
+    def serve_disk(path):
+        return serve(disk_name, path)
+
+    return serve_disk
