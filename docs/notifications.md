@@ -49,6 +49,8 @@ class Team(Notifiable, Model):
     ...
 ```
 
+Placez `Notifiable` **avant** `Model` (`class Team(Notifiable, Model)`), sinon la suppression du modèle ne supprimerait pas ses notifications : l'ordre inverse lève `TypeError`. Une colonne nommée `notify`, `notifications`, `unread_notifications` ou `route_notification_for` masquerait le mixin et lève aussi `TypeError` : renommez-la (`notifications_enabled`, par exemple).
+
 Pour le canal mail, le destinataire est l'attribut `email` du modèle. Pour en choisir un autre :
 
 ```python
@@ -66,13 +68,14 @@ user.notify(InvoicePaid(invoice))
 
 from flask_artisan.notifications import Notification
 
-Notification.send(team.members, InvoicePaid(invoice))                 # plusieurs destinataires
+Notification.send(team.members, InvoicePaid(invoice))                 # liste, set, User.where(...)
 Notification.route("mail", "compta@example.org").notify(InvoicePaid(invoice))   # sans compte
+Notification.route("mail", ("compta@example.org", "Compta")).notify(...)        # avec un nom
 ```
 
 Une notification « à la demande » (`Notification.route`) n'a pas de destinataire en base : le canal `database` y lève `ValueError`.
 
-Si un canal échoue (serveur SMTP injoignable, par exemple), les autres canaux et les autres destinataires sont essayés quand même, puis la première erreur remonte.
+Si un canal échoue (serveur SMTP injoignable, par exemple), les autres canaux et les autres destinataires sont essayés quand même, puis la première erreur remonte ; les suivantes sont écrites dans les logs.
 
 ## Le canal `database`
 
@@ -90,7 +93,7 @@ flask migrate
 | `id` | UUID (texte) |
 | `type` | la classe de la notification (`app.notifications.invoice_paid.InvoicePaid`) |
 | `notifiable_type`, `notifiable_id` | le destinataire : n'importe quel modèle |
-| `data` | le dict de `to_database` (JSON) |
+| `data` | le dict de `to_database` (JSON, clés en texte, sans `NaN`) |
 | `read_at` | date de lecture, `None` si non lue |
 | `created_at`, `updated_at` | |
 
@@ -108,7 +111,16 @@ notification.mark_as_read()            # mark_as_unread(), read(), unread()
 
 `notifications` et `unread_notifications` sont des requêtes : `.get()`, `.first()`, `.count()`, `.limit(10)`… s'enchaînent.
 
+L'ordre suit `created_at`, puis l'`id` (un UUID version 7, croissant dans le temps) pour deux notifications créées au même instant.
+
 Exemple de routes JSON pour une cloche de notifications :
+
+```python
+# routes/api.py
+with Route.middleware("auth:api"):   # sans middleware auth, Auth.user() vaut None
+    Route.get("/notifications", NotificationController.index)
+    Route.post("/notifications/<id>/read", NotificationController.read)
+```
 
 ```python
 from flask_artisan import Auth
@@ -123,7 +135,7 @@ class NotificationController:
         return notification.mark_as_read()
 ```
 
-Filtrez toujours par `Auth.user().notifications` (et non `DatabaseNotification.find(id)`) : sinon n'importe qui pourrait marquer la notification d'un autre.
+Filtrez toujours par `Auth.user().notifications` (et non `DatabaseNotification.find(id)`) : sinon n'importe qui pourrait marquer la notification d'un autre. Les modèles renvoyés en JSON contiennent aussi `type` et `notifiable_type` (des chemins de classes) : renvoyez plutôt `{"id": n.id, "data": n.data, "read_at": n.read_at}` si vous ne voulez pas les exposer.
 
 Supprimer un destinataire (suppression définitive) supprime ses notifications.
 
@@ -165,4 +177,4 @@ def test_invoice_paid_notifies_owner(client, user):
 | `assert_sent_on_demand(Classe, callback=None)` | envoyée par `Notification.route(...)` |
 | `assert_nothing_sent()` | aucune notification |
 
-`fake.sent(Classe)` renvoie les `(destinataire, notification, canaux)` enregistrés. En mode fake, rien n'est envoyé, écrit en base ni mis en file. Le mode s'arrête à la sortie du `with` (ou par `fake.restore()`).
+`fake.sent(Classe)` renvoie les `(destinataire, notification, canaux)` enregistrés. Pour une notification `ShouldQueue`, le fake vérifie aussi qu'elle se sérialise (comme `Queue.fake()`) : un attribut impossible à mettre en file échoue dans le test, pas en production. En mode fake, rien n'est envoyé, écrit en base ni mis en file. Le mode s'arrête à la sortie du `with` (ou par `fake.restore()`).

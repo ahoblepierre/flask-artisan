@@ -1,15 +1,45 @@
 import json
 import logging
+from email.utils import formataddr
 
 from flask_artisan.notifications.base import Notification
 from flask_artisan.notifications.models import DatabaseNotification
 from flask_artisan.notifications.notifiable import AnonymousNotifiable
 from flask_artisan.queue import Job, ShouldQueue
-from flask_artisan.queue.serialization import class_path, import_class
+from flask_artisan.queue.serialization import class_path, import_class, serialize
 
 CHANNELS = ("mail", "database")
 
 logger = logging.getLogger(__name__)
+
+
+def _keep_first(first, exc):
+    """La première erreur sera relevée ; les suivantes ne passent pas inaperçues."""
+    if first is None:
+        return exc
+    logger.error("Erreur de notification (une précédente sera relevée)", exc_info=exc)
+    return first
+
+
+def _route_json(value):
+    if isinstance(value, tuple) and len(value) == 2:
+        address, name = value
+        return formataddr((name, address))
+    if isinstance(value, list):
+        return [_route_json(item) for item in value]
+    return value
+
+
+def _as_list(notifiables) -> list:
+    from flask_artisan.database.model import Model
+    from flask_artisan.database.query import Builder
+
+    if isinstance(notifiables, Builder):
+        return notifiables.get()
+    single = (Model, AnonymousNotifiable, str, bytes, dict)
+    if isinstance(notifiables, single) or not hasattr(notifiables, "__iter__"):
+        return [notifiables]
+    return list(notifiables)
 
 
 class NotificationSender:
@@ -31,13 +61,9 @@ class NotificationSender:
         self._faking = False
 
     def send(self, notifiables, notification) -> None:
-        if not isinstance(notifiables, (list, tuple)):
-            notifiables = [notifiables]
+        notifiables = _as_list(notifiables)
         if self._faking:
-            for notifiable in notifiables:
-                self._recorded.append(
-                    (notifiable, notification, self.channels(notifiable, notification))
-                )
+            self._record(notifiables, notification)
             return
         first = None
         queued = isinstance(notification, ShouldQueue)
@@ -53,9 +79,24 @@ class NotificationSender:
                         job = SendQueuedNotification.wrap(notification, notifiable, channel)
                         self._app.make("queue").push(job)
                     except Exception as exc:  # noqa: BLE001 (relevée après les autres envois)
-                        first = first or exc
+                        first = _keep_first(first, exc)
             except Exception as exc:  # noqa: BLE001 (relevée après les autres envois)
-                first = first or exc
+                first = _keep_first(first, exc)
+        if first is not None:
+            raise first
+
+    def _record(self, notifiables, notification) -> None:
+        first = None
+        for notifiable in notifiables:  # comme un vrai envoi : un via() en échec n'arrête pas
+            try:
+                channels = self.channels(notifiable, notification)
+                if isinstance(notification, ShouldQueue):
+                    # Comme Queue.fake() : une erreur de sérialisation doit se voir sous fake.
+                    for channel in channels:
+                        serialize(SendQueuedNotification.wrap(notification, notifiable, channel))
+                self._recorded.append((notifiable, notification, channels))
+            except Exception as exc:  # noqa: BLE001 (relevée après les autres)
+                first = _keep_first(first, exc)
         if first is not None:
             raise first
 
@@ -76,7 +117,7 @@ class NotificationSender:
             try:
                 getattr(self, f"_send_{channel}")(notifiable, notification)
             except Exception as exc:  # noqa: BLE001 (relevée après les autres canaux)
-                first = first or exc
+                first = _keep_first(first, exc)
         if first is not None:
             raise first
 
@@ -110,8 +151,11 @@ class NotificationSender:
                 "(Notification.route) : aucun destinataire à enregistrer."
             )
         data = self._payload(notifiable, notification, "database")
+        name = type(notification).__name__
+        if not isinstance(data, dict) or not all(isinstance(k, str) for k in data):
+            raise TypeError(f"{name}.to_database() doit renvoyer un dict à clés str.")
         try:
-            json.dumps(data)
+            json.dumps(data, allow_nan=False)  # NaN : refusé par le JSON de Postgres
         except (TypeError, ValueError) as exc:
             raise TypeError(
                 f"{type(notification).__name__}.to_database() doit renvoyer du JSON : {exc}"
@@ -136,7 +180,10 @@ class SendQueuedNotification(Job):
         }
         # Un modèle voyage par identifiant (sérialisation de la file) ; à la demande : ses routes.
         if isinstance(notifiable, AnonymousNotifiable):
-            job.notifiable = {"routes": dict(notifiable.routes)}
+            # JSON ferait d'un (adresse, nom) une liste, lue comme deux destinataires : formaté.
+            job.notifiable = {
+                "routes": {ch: _route_json(value) for ch, value in notifiable.routes.items()}
+            }
         else:
             job.notifiable = notifiable
         job.channel = channel
