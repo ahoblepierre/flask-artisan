@@ -34,6 +34,8 @@ Données lues : paramètres de l'URL fusionnés avec le corps (JSON objet, sinon
  "errors": {"title": ["The title field is required."], "email": ["The email field must be a valid email address."]}}
 ```
 
+Sur une requête de formulaire HTML (hors routes d'API), l'échec redirige vers la page précédente avec `errors` et `old()` : voir [Vues et formulaires](vues.md#erreurs-de-validation-json-ou-redirection).
+
 Hors controller : `validate(data, rules)` rend les données validées ou lève `ValidationError` (qui devient la même réponse 422 si elle sort d'une vue) ; `Validator(data, rules).fails()` / `.errors()` pour décider soi-même.
 
 | Règles | |

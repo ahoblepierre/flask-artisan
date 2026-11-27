@@ -59,7 +59,7 @@ def test_invalid_request_is_422_and_controller_not_called(client):
 
 
 def test_unauthorized_is_403(client):
-    r = client.post("/deny")
+    r = client.post("/deny", headers={"Accept": "application/json"})
     assert r.status_code == 403
     assert r.get_json() == {"message": "This action is unauthorized."}
     assert calls == []

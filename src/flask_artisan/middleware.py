@@ -1,6 +1,13 @@
 from typing import ClassVar
 
 
+def expects_json(request) -> bool:
+    # Type préféré seulement : un `*/*` (curl, navigateurs) ne réclame pas du JSON.
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return True  # comme expectsJson de Laravel : un appel AJAX
+    return request.is_json or "json" in (request.accept_mimetypes.best or "")
+
+
 class Middleware:
     """Middleware en oignon : agit avant `next(request)`, après, ou court-circuite."""
 

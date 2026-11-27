@@ -16,6 +16,7 @@ from flask_artisan.facades import (
     Route,
     Schedule,
 )
+from flask_artisan.csrf import VerifyCsrfToken
 from flask_artisan.helpers import app, base_path, config, dispatch, event
 from flask_artisan.middleware import HttpKernel, Middleware
 from flask_artisan.providers import ServiceProvider
@@ -47,6 +48,7 @@ __all__ = [
     "Router",
     "Schedule",
     "ServiceProvider",
+    "VerifyCsrfToken",
     "__version__",
     "app",
     "base_path",
