@@ -64,6 +64,8 @@ class Application(Flask, Container):
         self.instance("events", events)
         self.instance(Dispatcher, events)
         mailer = Mailer(self)
+        # Résolu à la demande : importer les notifications enregistre leur table.
+        self.singleton("notifications", _notification_sender)
         self.instance("mail", mailer)
         self.instance(Mailer, mailer)
         queue = QueueManager(self)
@@ -179,3 +181,9 @@ def _trusted_proxies(value) -> int:
             f"app.trusted_proxies (TRUSTED_PROXIES) : entier ≥ 0 attendu, reçu {value!r}."
         )
     return number
+
+
+def _notification_sender(app):
+    from flask_artisan.notifications.sender import NotificationSender
+
+    return NotificationSender(app)
