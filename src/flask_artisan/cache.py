@@ -58,6 +58,7 @@ PUBLIC = (
     "increment",
     "decrement",
     "flush",
+    "prune",
     "lock",
     "restore_lock",
 )
@@ -105,6 +106,10 @@ class Store:
         raise NotImplementedError
 
     def _flush(self) -> None:
+        raise NotImplementedError
+
+    def _prune(self) -> int:
+        """Supprime les entrées expirées, renvoie leur nombre."""
         raise NotImplementedError
 
     # --- encodage ---
@@ -196,6 +201,9 @@ class Store:
 
     def flush(self) -> None:
         self._flush()
+
+    def prune(self) -> int:
+        return self._prune()
 
     def lock(self, name: str, seconds=0, owner: str | None = None) -> "Lock":
         return Lock(self, name, seconds, owner)
@@ -328,8 +336,13 @@ class ArrayStore(Store):
     def _flush(self):
         self._data.clear()
 
+    def _prune(self):
+        with self._mutex:
+            return sum(self._alive(k) is None for k in list(self._data))
+
 
 _STALE = object()  # FileStore._read : clé expirée ou corrompue, à supprimer sous le verrou
+_CORRUPT = object()  # FileStore._load : fichier illisible
 CACHE_FILE = re.compile(r"[0-9a-f]{64}")
 
 
@@ -352,10 +365,10 @@ class FileStore(Store):
         except FileNotFoundError:
             pass
 
-    def _read(self, k: str, clean: bool = True):
-        """(expiration, texte), ou None si absente. `clean=False` : une clé expirée ou corrompue
-        renvoie _STALE au lieu d'être supprimée, pour la supprimer sous le verrou."""
-        path = self._path(k)
+    @staticmethod
+    def _load(path: Path):
+        """(inode, entrée), sans rien supprimer : entrée None si absente, _CORRUPT si illisible,
+        _STALE si expirée, sinon (expiration, texte)."""
         inode = None
         try:
             with open(path) as f:
@@ -367,19 +380,26 @@ class FileStore(Store):
             ):
                 raise TypeError("format inattendu")
         except FileNotFoundError:
-            return None
+            return None, None
         except (OSError, ValueError, KeyError, TypeError):
-            if not clean:
-                return _STALE
-            self._unlink_if_same(path, inode)  # fichier corrompu : absent
-            logger.warning("Cache : fichier illisible pour %r, supprimé.", k)
-            return None
+            return inode, _CORRUPT
         if expires is not None and expires <= time.time():
+            return inode, _STALE
+        return inode, (expires, text)
+
+    def _read(self, k: str, clean: bool = True):
+        """(expiration, texte), ou None si absente. `clean=False` : une clé expirée ou corrompue
+        renvoie _STALE au lieu d'être supprimée, pour la supprimer sous le verrou."""
+        path = self._path(k)
+        inode, entry = self._load(path)
+        if entry is _CORRUPT or entry is _STALE:
             if not clean:
                 return _STALE
             self._unlink_if_same(path, inode)
+            if entry is _CORRUPT:
+                logger.warning("Cache : fichier illisible pour %r, supprimé.", k)
             return None
-        return expires, text
+        return entry
 
     def _write(self, k: str, expires: float | None, text: str) -> None:
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -466,6 +486,24 @@ class FileStore(Store):
                 if CACHE_FILE.fullmatch(path.name) and path.is_file():
                     path.unlink(missing_ok=True)
 
+    def _prune(self):
+        if not self.directory.is_dir():
+            return 0
+        count = 0
+        for path in self.directory.iterdir():
+            if not (CACHE_FILE.fullmatch(path.name) and path.is_file()):
+                continue
+            if self._load(path)[1] not in (_STALE, _CORRUPT):
+                continue
+            # Verrou par fichier, jamais sur tout le parcours : un gros dossier ne doit pas
+            # bloquer les requêtes limitées. On relit sous le verrou : une écriture a pu passer.
+            with self._locked():
+                inode, entry = self._load(path)
+                if entry is _STALE or entry is _CORRUPT:
+                    self._unlink_if_same(path, inode)
+                    count += 1
+        return count
+
 
 @cache
 def _redis(url: str):
@@ -528,6 +566,9 @@ class RedisStore(Store):
             return int(self.client.incrby(k, by))  # garde le TTL
         except ResponseError as exc:
             raise ValueError(f"increment : la valeur de {k!r} n'est pas un entier.") from exc
+
+    def _prune(self):
+        return 0  # Redis applique lui-même le TTL
 
     def _flush(self):
         # Préfixe échappé : un * ou un [ dans le préfixe ne doit pas élargir le motif.

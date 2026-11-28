@@ -179,3 +179,17 @@ def test_bad_decimal_counts_as_missing(store):
 def test_non_finite_ttl_rejected(store, ttl):
     with pytest.raises(TypeError):
         store.put("k", 1, ttl)
+
+
+def test_prune_keeps_live_entries(store, clock):
+    store.put("short", 1, 10)
+    store.put("long", 2, 100)
+    store.forever("always", 3)
+    clock.advance(11)
+    store.prune()
+    assert store.missing("short")
+    assert store.get("long") == 2 and store.get("always") == 3
+
+
+def test_prune_returns_an_int(store):
+    assert store.prune() == 0
