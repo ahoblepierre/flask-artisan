@@ -7,6 +7,7 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 ### Sécurité
 
 - URLs signées : un lien dont la requête était déplacée dans le chemin (`%3F`) restait valide après expiration ; il est désormais refusé, et `signed_url` refuse une valeur de route contenant `?` (#63). Les liens déjà envoyés restent valides, sauf ceux dont une valeur de route contenait `?` : ils répondent désormais 403.
+- Le champ `token` (jeton de réinitialisation du mot de passe) n'est plus recopié dans le cookie de session après un échec de validation (#65).
 
 ## [0.10.0] - 2026-11-27
 

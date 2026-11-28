@@ -90,7 +90,7 @@ Dans tous les templates :
 
 Les erreurs et les saisies ne vivent que pour la requête qui suit la redirection. Pour les garder, la session étant un cookie signé :
 
-- les champs `password`, `password_confirmation` et `current_password` ne sont jamais gardés ;
+- les champs `password`, `password_confirmation`, `current_password`, `_token` (jeton CSRF) et `token` (jeton de réinitialisation du mot de passe) ne sont jamais gardés ;
 - les saisies gardées tiennent dans un budget d'environ 2 Ko, mesuré comme dans le cookie (un caractère non latin y prend 6 octets). Au-delà, les plus grosses saisies sont écartées d'abord, et `old()` rend leur valeur par défaut. Sans ce budget, le cookie dépasserait environ 4 Ko et le navigateur l'ignorerait : la page du formulaire reviendrait sans erreurs ni saisies ;
 - pour un champ à valeurs multiples, seule la première valeur est gardée.
 
