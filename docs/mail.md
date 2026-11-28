@@ -16,7 +16,7 @@ Le transport se choisit avec `MAIL_MAILER` dans `.env` :
 
 | Transport | Effet | Usage |
 |---|---|---|
-| `log` (défaut) | le mail complet est écrit dans les logs de l'application (visible quand `APP_DEBUG=true`) | développement |
+| `log` (défaut) | le mail est écrit lisiblement dans les logs de l'application (en-têtes, corps texte et HTML décodés, noms des pièces jointes : les liens se copient tels quels) (visible quand `APP_DEBUG=true`) | développement |
 | `smtp` | le mail est envoyé à un serveur SMTP | production, ou Mailtrap pour tester |
 | `array` | le mail est gardé en mémoire (`Mail.transport("array").messages`) | tests qui vérifient le rendu |
 

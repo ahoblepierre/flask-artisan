@@ -122,6 +122,18 @@ def test_log_transport(mail_app, caplog):
     assert "Hello A" in caplog.text and "s3cret" not in caplog.text
 
 
+def test_log_transport_writes_decoded_body(mail_app, caplog):
+    """Un lien long avec des `=` reste copiable : pas de quoted-printable dans les logs."""
+    mail_app.make("config").set("mail.default", "log")
+    url = "http://localhost/verify/1/abc?expires=1795852579&signature=" + "f" * 64
+    with caplog.at_level(logging.INFO):
+        Mail.to("a@x.org").send(Hello(url))
+    assert url in caplog.text  # partie texte
+    assert url.replace("&", "&amp;") in caplog.text  # partie HTML, échappée par Jinja
+    assert "=3D" not in caplog.text and "=\n" not in caplog.text
+    assert "Subject: Hi" in caplog.text
+
+
 @pytest.mark.parametrize("encryption", ["tls", "ssl"])
 def test_smtp_verifies_certificate(smtp, encryption):
     smtp(host="h", port=587, encryption=encryption)
