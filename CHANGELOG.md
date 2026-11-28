@@ -4,6 +4,10 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ## [Non publié]
 
+### Sécurité
+
+- URLs signées : un lien dont la requête était déplacée dans le chemin (`%3F`) restait valide après expiration ; il est désormais refusé, et `signed_url` refuse une valeur de route contenant `?` (#63).
+
 ## [0.10.0] - 2026-11-27
 
 ### Ajouté

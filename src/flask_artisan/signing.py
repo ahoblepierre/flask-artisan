@@ -41,6 +41,11 @@ def signed_url(endpoint: str, expires: int | None = None, **values) -> str:
     if expires is not None:
         values["expires"] = int(_now()) + expires
     relative = url_for(endpoint, **values)
+    if "?" in unquote(urlsplit(relative).path):
+        raise ValueError(
+            f"signed_url('{endpoint}') : une valeur de route contient « ? », "
+            "impossible à signer sans ambiguïté."
+        )
     signature = _sign(_canonical(relative))
     if external:
         # Même chemin, même ordre des paramètres : signature ajoutée en dernier.
@@ -49,6 +54,8 @@ def signed_url(endpoint: str, expires: int | None = None, **values) -> str:
 
 
 def has_valid_signature(req) -> bool:
+    if "?" in req.path:  # un « ? » décodé (%3F) imiterait le séparateur de la requête signée
+        return False
     # latin-1 : jamais d'erreur de décodage ; une URL signée n'a que de l'ASCII (encodé en %).
     params = req.query_string.decode("latin-1").split("&") if req.query_string else []
     signatures = [p for p in params if p.startswith("signature=")]

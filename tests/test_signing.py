@@ -92,3 +92,39 @@ def test_non_utf8_query_is_forbidden_not_500(client):
     # WSGI : QUERY_STRING en latin-1, l'octet 0xFF n'est pas de l'UTF-8 valide.
     response = client.get("/files/3", environ_overrides={"QUERY_STRING": "a=\xff&signature=x"})
     assert response.status_code == 403
+
+
+def _moved_query(url):
+    # /s/report?expires=T&signature=S  ->  /s/report%3Fexpires=T?signature=S
+    path, query = url.split("?", 1)
+    rest, signature = query.rsplit("&", 1)
+    return f"{path}%3F{rest}?{signature}"
+
+
+@pytest.fixture
+def named_app(routed_app):
+    return routed_app(
+        lambda: Route.get("/s/<name>", lambda name: name).name("s").middleware(ValidateSignature)
+    )
+
+
+def test_query_moved_into_path_is_forbidden(named_app, monkeypatch):
+    client = named_app.test_client()
+    with named_app.test_request_context():
+        url = signed_url("s", expires=60, name="report")
+    assert client.get(_moved_query(url)).status_code == 403
+    monkeypatch.setattr(signing, "_now", lambda: signing.time.time() + 3600)
+    assert client.get(_moved_query(url)).status_code == 403
+
+
+def test_lowercase_encoded_question_mark_is_forbidden(named_app):
+    with named_app.test_request_context():
+        url = signed_url("s", expires=60, name="report")
+    moved = _moved_query(url).replace("%3F", "%3f")
+    assert named_app.test_client().get(moved).status_code == 403
+
+
+@pytest.mark.parametrize("external", [False, True])
+def test_value_with_question_mark_cannot_be_signed(named_app, external):
+    with named_app.test_request_context(), pytest.raises(ValueError, match="'s'"):
+        signed_url("s", name="a?b", _external=external)
