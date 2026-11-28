@@ -4,11 +4,20 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ## [Non publié]
 
+### Ajouté
+
+- `Cache.prune()` et la commande `flask cache:prune` : suppression des entrées expirées ; sans argument, le store par défaut et celui des compteurs (`cache.limiter`) (#64).
+
+### Modifié
+
+- Squelette : `routes/console.py` planifie `cache:prune` toutes les heures (#64).
+
 ### Sécurité
 
 - URLs signées : un lien dont la requête était déplacée dans le chemin (`%3F`) restait valide après expiration ; il est désormais refusé, et `signed_url` refuse une valeur de route contenant `?` (#63). Les liens déjà envoyés restent valides, sauf ceux dont une valeur de route contenait `?` : ils répondent désormais 403.
 - Le champ `token` (jeton de réinitialisation du mot de passe) n'est plus recopié dans le cookie de session après un échec de validation (#65).
 - Une lecture de la session avant les `before_request` (`url_value_preprocessor`, convertisseur d'URL, `request_started`) garde désormais `Vary: Cookie` sur la réponse : un cache partagé ne la sert plus à un autre utilisateur (#66).
+- Le store `file` gardait pour toujours les compteurs de limitation de chaque adresse IP : `cache:prune` les supprime une fois expirés (#64). Un projet existant doit ajouter `Schedule.command("cache:prune").hourly()` à `routes/console.py`.
 
 ## [0.10.0] - 2026-11-27
 

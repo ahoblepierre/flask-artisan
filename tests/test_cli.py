@@ -327,10 +327,10 @@ def test_generated_project_schedule(project):
     assert "Schedule" in (project / "routes" / "console.py").read_text()
     result = run(project, "-m", "flask", "schedule:list")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Aucune tâche planifiée." in result.stdout
+    assert "cache:prune" in result.stdout
+    # À la minute 0 la tâche horaire s'exécute : seul le code de sortie est stable.
     result = run(project, "-m", "flask", "schedule:run")
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Aucune tâche planifiée à exécuter." in result.stdout
 
 
 STORAGE_FLOW = """

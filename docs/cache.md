@@ -49,6 +49,7 @@ Cache.store("redis").put("k", "v", 60)
 | `forget(key)` | supprime ; renvoie `True` si la clé existait |
 | `increment(key, by=1)` / `decrement(key, by=1)` | ajoute à un entier et renvoie le résultat ; une clé absente vaut 0 ; l'expiration est conservée |
 | `flush()` | vide le store |
+| `prune()` | supprime les entrées expirées et renvoie leur nombre (voir [Purger les entrées expirées](#purger-les-entrees-expirees)) |
 
 - `None` équivaut à « absent » : `put(key, None)` supprime la clé, et un `remember` dont le callback renvoie `None` ne stocke rien (il sera rappelé la fois suivante). Un `ttl` de 0 ou négatif supprime aussi la clé.
 - Un `ttl` fractionnaire est arrondi à la seconde supérieure.
@@ -90,3 +91,22 @@ def empty_cache():
 flask cache:clear            # le store par défaut
 flask cache:clear redis      # un store précis
 ```
+
+## Purger les entrées expirées
+
+Les stores `file` et `array` ne suppriment une entrée expirée que lorsqu'on relit sa clé. Une clé jamais relue reste donc stockée : c'est le cas des compteurs de [`throttle`](limitation-de-debit.md), deux fichiers par adresse IP. `flask cache:prune` les supprime :
+
+```bash
+flask cache:prune            # le store par défaut, et celui des compteurs (cache.limiter) s'il est différent
+flask cache:prune file       # un store précis
+```
+
+Les entrées encore valides et celles sans expiration restent. Seul le store `file` en a vraiment besoin : Redis supprime lui-même les clés expirées (la commande y renvoie 0), et le store `array` disparaît avec le processus. `Cache.prune()` fait la même chose depuis le code, pour le store par défaut.
+
+Un projet généré planifie déjà la commande toutes les heures dans `routes/console.py` (voir [Tâches planifiées](planification.md)). Dans un projet créé avant la 0.10.1, ajoutez cette ligne, puis installez la ligne cron du planificateur :
+
+```python
+Schedule.command("cache:prune").hourly()
+```
+
+En production, préférez Redis pour les compteurs (`"limiter": "redis"` dans `config/cache.py`) : ils expirent sans aucune purge.

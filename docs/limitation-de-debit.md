@@ -150,6 +150,8 @@ Cache.restore_lock("import:clients", self.owner).release()
 
 Avec plusieurs serveurs, utilisez `redis` (`CACHE_STORE=redis`, ou seulement `"limiter": "redis"` pour les compteurs).
 
+Avec le store `file`, chaque adresse IP vue laisse deux fichiers de compteur dans `storage/cache`, jusqu'à `flask cache:prune`, planifiée toutes les heures dans un projet généré (voir [Purger les entrées expirées](cache.md#purger-les-entrees-expirees)).
+
 ## Tester
 
 Avec le store `file`, les compteurs restent sur le disque d'un lancement de tests à l'autre : le 6ᵉ login en une minute répondrait 429. Utilisez `CACHE_STORE=array` en test et videz le cache entre deux tests (voir [Cache, Tester](cache.md#tester)), et remettez vos propres compteurs à zéro avec `RateLimiter.clear(key)`. Les compteurs de `throttle` ont une clé interne (un hash) : pour eux, videz le cache (`Cache.flush()`).
