@@ -4,6 +4,8 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ## [Non publié]
 
+## [0.10.2] - 2026-11-28
+
 ### Corrigé
 
 - Squelette et `auth:install` : `test_login_then_logout` et `test_register_creates_user_and_logs_in` échouaient quand `/dashboard` est protégé par `verified`, comme le conseille `auth:install`. Leur utilisateur a désormais un e-mail vérifié si `User` hérite de `MustVerifyEmail`. Un projet existant peut recopier ces deux tests depuis le squelette ou les stubs (#76).
@@ -166,6 +168,7 @@ Première version publique.
 - **Auth** : façade `Auth` (`attempt`, `validate`, `login`, `logout`, `user`…), guards session et token (tokens d'API en base façon Sanctum), hash automatique du mot de passe, middleware `auth` / `auth:api`, routes `/api/login`, `/api/user`, `/api/logout` dans le squelette.
 - **Console** : `flask make:controller|model|middleware|provider|command`, commandes du projet découvertes dans `app/console/commands/`, `flask route:list`.
 
+[0.10.2]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.10.2
 [0.10.1]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.10.1
 [0.10.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.10.0
 [0.9.0]: https://github.com/ahoblepierre/flask-artisan/releases/tag/v0.9.0
