@@ -68,3 +68,17 @@ def test_no_vary_cookie_when_nothing_flashed(client):
     with client.session_transaction() as session:
         session["other"] = 1
     assert "Cookie" not in client.get("/json").headers.get("Vary", "")
+
+
+def test_session_read_before_before_request_keeps_vary_cookie(client):
+    app = client.application
+
+    @app.url_value_preprocessor
+    def read_session(endpoint, values):
+        from flask import g, session
+
+        g.uid = session.get("uid")
+
+    with client.session_transaction() as session:
+        session["uid"] = "alice"
+    assert "Cookie" in client.get("/json").headers.get("Vary", "")
