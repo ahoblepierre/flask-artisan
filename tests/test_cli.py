@@ -404,6 +404,13 @@ def test_generated_project_auth_install(project):
     user.write_text(source)
     assert "skipped" not in ok("-m", "pytest", "-q", "-p", "no:cacheprovider")
 
+    # Étape 2 du conseil : /dashboard protégé par verified, les tests du projet restent verts.
+    web = project / "routes" / "web.py"
+    route = 'Route.get("/dashboard", DashboardController.index).name("dashboard")'
+    assert route in web.read_text()
+    web.write_text(web.read_text().replace(route, route + '.middleware("verified")'))
+    ok("-m", "pytest", "-q", "-p", "no:cacheprovider")
+
     ok("-m", "flask", "make:migration", "auth install")
     [migration] = (project / "database" / "migrations").glob("*auth_install*.py")
     text = migration.read_text()
