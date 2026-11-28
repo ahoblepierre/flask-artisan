@@ -4,6 +4,8 @@ from decimal import Decimal
 
 import pytest
 
+from flask_artisan.cache import ArrayStore, RedisStore
+
 from .models import CPost
 
 
@@ -186,10 +188,20 @@ def test_prune_keeps_live_entries(store, clock):
     store.put("long", 2, 100)
     store.forever("always", 3)
     clock.advance(11)
-    store.prune()
+    # Compté avant toute relecture (une lecture supprime aussi) ; Redis expire lui-même.
+    assert store.prune() == (0 if isinstance(store, RedisStore) else 1)
     assert store.missing("short")
     assert store.get("long") == 2 and store.get("always") == 3
 
 
 def test_prune_returns_an_int(store):
     assert store.prune() == 0
+
+
+def test_array_prune_drops_expired_entries(clock):
+    store = ArrayStore("p:")
+    store.put("old", 1, 10)
+    store.forever("always", 1)
+    clock.advance(11)
+    assert store.prune() == 1
+    assert list(store._data) == ["p:always"]
