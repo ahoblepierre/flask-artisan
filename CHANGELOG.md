@@ -6,6 +6,7 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ### Corrigé
 
+- Squelette et `auth:install` : `test_login_then_logout` et `test_register_creates_user_and_logs_in` échouaient quand `/dashboard` est protégé par `verified`, comme le conseille `auth:install`. Leur utilisateur a désormais un e-mail vérifié si `User` hérite de `MustVerifyEmail`. Un projet existant peut recopier ces deux tests depuis le squelette ou les stubs (#76).
 - Transport mail `log` : le corps est écrit décodé (en-têtes, puis chaque partie texte ou HTML, et le nom des pièces jointes) au lieu du quoted-printable, illisible. Les liens des mails, comme ceux de `auth:install`, se copient tels quels depuis la console (#75).
 
 ### Sécurité

@@ -54,6 +54,9 @@ def link(user) -> str:
 def test_register_creates_user_and_logs_in(client, fake):
     user = registered(client)
     assert user.check_password("correct-horse")
+    if hasattr(user, "mark_email_as_verified"):  # /dashboard peut exiger "verified"
+        with app.app_context():
+            user.mark_email_as_verified()
     client.get("/dashboard").assert_ok()
 
 

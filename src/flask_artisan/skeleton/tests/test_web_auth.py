@@ -8,7 +8,10 @@ LOGIN_PAGE = {"Referer": "http://localhost/login"}
 @pytest.fixture
 def ada(client):
     with app.app_context():
-        return User.create(name="Ada", email="ada@example.org", password="secret")
+        user = User.create(name="Ada", email="ada@example.org", password="secret")
+        if hasattr(user, "mark_email_as_verified"):  # /dashboard peut exiger "verified"
+            user.mark_email_as_verified()
+        return user
 
 
 def test_dashboard_requires_login(client):
