@@ -119,3 +119,5 @@ Route.get("/invoices/<int:id>/download", download).name("invoices.download").mid
 ```
 
 La signature (HMAC-SHA256 avec `APP_KEY`) couvre le chemin et les paramètres. Toute modification, ou un lien expiré, donne un 403. `_external=True` produit une URL absolue.
+
+Une valeur de route qui contient `?` ne peut pas être signée : `signed_url` lève `ValueError`.
