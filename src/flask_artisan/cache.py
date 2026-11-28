@@ -632,6 +632,19 @@ class CacheManager:
         raise AttributeError(name)
 
 
+@contextmanager
+def _cli_errors():
+    """Erreurs de store attendues (inconnu, disque, Redis) → message propre, code 1."""
+    try:
+        yield
+    except (ValueError, RuntimeError, OSError) as exc:
+        raise click.ClickException(str(exc)) from None
+    except Exception as exc:
+        if type(exc).__module__.startswith("redis"):  # Redis injoignable, refus d'authentification…
+            raise click.ClickException(f"Redis : {exc}") from None
+        raise
+
+
 @click.command("cache:clear")
 @click.argument("store_name", required=False)
 @with_appcontext
@@ -639,12 +652,22 @@ def cache_clear(store_name):
     """Vide un store de cache (défaut : le store par défaut)."""
     manager = current_app.make("cache")
     name = store_name or manager._config("default", "file")
-    try:
+    with _cli_errors():
         manager.store(name).flush()
-    except (ValueError, RuntimeError, OSError) as exc:
-        raise click.ClickException(str(exc)) from None
-    except Exception as exc:
-        if type(exc).__module__.startswith("redis"):  # Redis injoignable, refus d'authentification…
-            raise click.ClickException(f"Redis : {exc}") from None
-        raise
     click.echo(f"Cache vidé : {name}.")
+
+
+@click.command("cache:prune")
+@click.argument("store_name", required=False)
+@with_appcontext
+def cache_prune(store_name):
+    """Supprime les entrées expirées (défaut : le store par défaut et celui des compteurs)."""
+    manager = current_app.make("cache")
+    names = [store_name or manager._config("default", "file")]
+    limiter = manager._config("limiter")
+    if not store_name and limiter and limiter != names[0]:
+        names.append(limiter)  # compteurs de throttle dans un store à part
+    for name in names:
+        with _cli_errors():
+            count = manager.store(name).prune()
+        click.echo(f"{count} entrée(s) expirée(s) supprimée(s) du store {name}.")

@@ -9,7 +9,7 @@ import click
 from flask import current_app
 from flask.cli import AppGroup, with_appcontext
 
-from flask_artisan.cache import cache_clear
+from flask_artisan.cache import cache_clear, cache_prune
 from flask_artisan.queue.commands import COMMANDS as QUEUE_COMMANDS
 from flask_artisan.scheduling import COMMANDS as SCHEDULE_COMMANDS
 
@@ -328,6 +328,7 @@ COMMANDS = [
     route_list,
     *QUEUE_COMMANDS,
     cache_clear,
+    cache_prune,
     *SCHEDULE_COMMANDS,
 ]
 
