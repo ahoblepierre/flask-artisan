@@ -169,3 +169,51 @@ def test_prune_reclaims_throttle_counters(tmp_path, clock):
     clock.advance(61)
     assert store.prune() == 60
     assert files(tmp_path) == []
+
+
+@pytest.fixture
+def unreadable():
+    """Rend un fichier illisible (chmod 000) ; saute le test si les droits ne s'appliquent pas."""
+    paths = []
+
+    def make(path):
+        path.chmod(0)
+        paths.append(path)
+        if os.access(path, os.R_OK):
+            pytest.skip("droits non appliqués (root ou Windows)")
+        return path
+
+    yield make
+    for path in paths:
+        if path.exists():
+            path.chmod(0o644)
+
+
+def test_unreadable_file_raises_and_is_kept(tmp_path, unreadable):
+    store = FileStore("p:", tmp_path)
+    store.put("k", 1)
+    path = unreadable(store._path("p:k"))
+    with pytest.raises(PermissionError):
+        store.get("k")
+    assert path.exists()
+
+
+def test_add_on_unreadable_file_raises(tmp_path, unreadable):
+    store = FileStore("p:", tmp_path)
+    store.put("k", 1)
+    path = unreadable(store._path("p:k"))
+    with pytest.raises(PermissionError):
+        store.add("k", 2)
+    assert path.exists()
+
+
+def test_prune_skips_unreadable_file(tmp_path, clock, caplog, unreadable):
+    store = FileStore("p:", tmp_path)
+    store.put("a", 1, 10)
+    store.put("b", 1, 10)
+    kept = unreadable(store._path("p:a"))
+    clock.advance(11)
+    with caplog.at_level(logging.WARNING):
+        assert store.prune() == 1
+    assert kept.exists() and not store._path("p:b").exists()
+    assert kept.name in caplog.text

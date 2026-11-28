@@ -4,6 +4,10 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ## [Non publié]
 
+### Sécurité
+
+- Store `file` : une erreur de lecture (droits, disque) ne supprime plus le fichier. `cache:prune` le laisse en place avec un avertissement, et une lecture par clé lève l'erreur au lieu de prendre un verrou tenu (#73).
+
 ## [0.10.1] - 2026-11-28
 
 ### Ajouté

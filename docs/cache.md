@@ -67,7 +67,7 @@ Un **modèle** est stocké par son identifiant et **relu en base à chaque lectu
 user_card = Cache.remember(f"user:{user.id}:card", 300, lambda: user.to_dict())
 ```
 
-Une valeur devenue illisible (modèle supprimé depuis, classe déplacée, fichier corrompu) compte comme **absente** : la clé est supprimée, un avertissement est journalisé, et `remember` recalcule. Le cache ne lève jamais de 404.
+Une valeur devenue illisible (modèle supprimé depuis, classe déplacée, fichier corrompu) compte comme **absente** : la clé est supprimée, un avertissement est journalisé, et `remember` recalcule. Le cache ne lève jamais de 404. En revanche, un fichier du store `file` que le serveur ne peut pas lire (droits, erreur disque) n'est jamais supprimé : l'erreur remonte, et `flask cache:prune` le laisse en place avec un avertissement.
 
 ## Tester
 
