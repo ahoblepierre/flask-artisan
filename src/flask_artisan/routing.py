@@ -16,8 +16,9 @@ from werkzeug.exceptions import Forbidden
 from flask_artisan.middleware import HttpKernel, expects_json, resolve
 from flask_artisan.validation import AuthorizationError, FormRequest, ValidationError
 
-# Jamais gardés en session pour old() (comme dontFlash de Laravel).
-DONT_FLASH = {"password", "password_confirmation", "current_password", "_token"}
+# Jamais gardés en session pour old() (comme dontFlash de Laravel). Le cookie de session Flask
+# est signé, pas chiffré : `token` (jeton de réinitialisation du mot de passe) n'y va pas.
+DONT_FLASH = {"password", "password_confirmation", "current_password", "_token", "token"}
 # Budget des saisies flashées, en JSON échappé (\uXXXX) comme dans le cookie de session :
 # au-delà d'environ 4 Ko, le navigateur ignorerait le cookie. Les plus grosses sautent d'abord.
 MAX_OLD_BYTES = 2000

@@ -123,3 +123,11 @@ def test_fallback_respects_script_root(app):
     app.test_client().post("/form", data=DATA, base_url="http://localhost/blog").assert_redirect(
         "/blog/"
     )
+
+
+def test_reset_token_is_never_flashed(app):
+    client = app.test_client()
+    data = {"email": "x", "token": "secret-reset-token", "password": "s"}
+    client.post("/form?token=from-query", data=data, headers=REFERER)
+    old = flashed(client)["_flash_old"]
+    assert old == {"email": "x"}
