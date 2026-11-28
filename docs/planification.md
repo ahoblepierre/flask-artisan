@@ -46,6 +46,8 @@ Une tâche qui échoue (exception, verrou injoignable, commande inconnue, `sys.e
 
 `routes/console.py` n'est chargé que par les commandes `schedule:*` : une erreur dans ce fichier ne bloque pas l'app web.
 
+Le squelette y planifie déjà `Schedule.command("cache:prune").hourly()`, qui supprime les entrées expirées du cache (voir [Purger les entrées expirées](cache.md#purger-les-entrees-expirees)).
+
 ## Fréquences
 
 | Méthode | Expression cron |

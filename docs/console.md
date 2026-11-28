@@ -17,6 +17,7 @@ flask make:middleware EnsureJson                 # app/http/middleware/ensure_js
 flask make:provider PaymentServiceProvider       # app/providers/payment_service_provider.py
 flask make:command SendEmails                    # app/console/commands/send_emails.py → flask app:send-emails
 flask cache:clear                                # vide le cache (voir « Cache »)
+flask cache:prune                                # supprime les entrées expirées du cache
 ```
 
 Un fichier existant n'est jamais écrasé sans `--force`. `make:middleware` et `make:provider` affichent la ligne à ajouter au kernel ou à `config/app.py`.

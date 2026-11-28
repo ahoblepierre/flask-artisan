@@ -112,3 +112,60 @@ def test_cache_files_readable_by_group_and_others(tmp_path):
     FileStore("p:", tmp_path).put("k", 1)
     [path] = tmp_path.iterdir()
     assert path.stat().st_mode & 0o777 == 0o644
+
+
+def test_prune_removes_expired_and_unreadable_files(tmp_path, clock):
+    store = FileStore("p:", tmp_path)
+    store.put("old", 1, 10)
+    store.put("live", 1, 100)
+    store.forever("always", 1)
+    corrupt = tmp_path / ("0" * 64)
+    corrupt.write_text("{pas du json")
+    clock.advance(11)
+    assert store.prune() == 2
+    assert len(files(tmp_path)) == 2
+    assert store.get("live") == 1 and store.get("always") == 1
+
+
+def test_prune_leaves_foreign_files(tmp_path):
+    store = FileStore("p:", tmp_path)
+    store.put("k", 1)
+    for name in (".gitignore", ".tmp-abc"):
+        (tmp_path / name).write_text("x")
+    (tmp_path / ("a" * 64)).mkdir()
+    assert store.prune() == 0
+    assert {".gitignore", ".tmp-abc", "a" * 64} <= set(files(tmp_path))
+
+
+def test_prune_missing_directory(tmp_path):
+    store = FileStore("p:", tmp_path / "absent")
+    assert store.prune() == 0
+    assert not (tmp_path / "absent").exists()
+
+
+def test_prune_spares_a_file_rewritten_meanwhile(tmp_path, clock):
+    store = FileStore("p:", tmp_path)
+    store.put("k", "old", 10)
+    clock.advance(11)
+    real_locked = store._locked
+
+    def rewrite_then_lock():
+        store.put("k", "new", 100)  # os.replace entre la lecture et le verrou
+        return real_locked()
+
+    store._locked = rewrite_then_lock  # pas monkeypatch.undo() : il annulerait aussi l'horloge
+    assert store.prune() == 0
+    del store._locked
+    assert store.get("k") == "new"
+
+
+def test_prune_reclaims_throttle_counters(tmp_path, clock):
+    # Scénario de l'audit : deux clés par client anonyme, jamais relues.
+    store = FileStore("p:", tmp_path)
+    for i in range(30):
+        store.add(f"throttle:{i}:timer", 1, 60)
+        store.add(f"throttle:{i}", 0, 60)
+    assert len(files(tmp_path)) == 60
+    clock.advance(61)
+    assert store.prune() == 60
+    assert files(tmp_path) == []

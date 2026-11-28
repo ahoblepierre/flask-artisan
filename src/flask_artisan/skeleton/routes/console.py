@@ -3,7 +3,11 @@
 Ce fichier n'est chargé que par les commandes schedule:*, jamais par l'app web.
 """
 
-from flask_artisan import Schedule  # noqa: F401
+from flask_artisan import Schedule
+
+# Supprime les entrées expirées du cache, dont les compteurs de limitation laissés par chaque
+# adresse IP (sans elle, le store `file` grossit sans fin).
+Schedule.command("cache:prune").hourly()
 
 # Une commande flask (celles du framework ou de app/console/commands/) :
 # Schedule.command("cache:clear").daily_at("03:00")
