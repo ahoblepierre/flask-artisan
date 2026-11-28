@@ -130,7 +130,20 @@ class LogTransport:
         self.logger = logger
 
     def send(self, message: EmailMessage, recipients: list[str]) -> None:
-        self.logger.info("Mail pour %s :\n%s", ", ".join(recipients), message.as_string())
+        # Corps décodé, pas `as_string()` : le quoted-printable rend les liens inutilisables.
+        lines = [
+            f"{k}: {v}"
+            for k, v in message.items()
+            if not k.lower().startswith(("content-", "mime-"))
+        ]
+        for part in message.walk():
+            if part.is_multipart():
+                continue
+            if part.is_attachment():
+                lines.append(f"\n[pièce jointe : {part.get_filename()}]")
+            else:
+                lines.append(f"\n--- {part.get_content_type()} ---\n{part.get_content()}")
+        self.logger.info("Mail pour %s :\n%s", ", ".join(recipients), "\n".join(lines))
 
 
 class SmtpTransport:

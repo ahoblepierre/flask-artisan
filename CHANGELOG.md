@@ -4,6 +4,10 @@ Toutes les évolutions notables de Flask-Artisan. Format inspiré de [Keep a Cha
 
 ## [Non publié]
 
+### Corrigé
+
+- Transport mail `log` : le corps est écrit décodé (en-têtes, puis chaque partie texte ou HTML, et le nom des pièces jointes) au lieu du quoted-printable, illisible. Les liens des mails, comme ceux de `auth:install`, se copient tels quels depuis la console (#75).
+
 ### Sécurité
 
 - Store `file` : une erreur de lecture (droits, disque) ne supprime plus le fichier. `cache:prune` le laisse en place avec un avertissement, et une lecture par clé lève l'erreur au lieu de prendre un verrou tenu (#73).
