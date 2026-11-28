@@ -367,8 +367,9 @@ class FileStore(Store):
 
     @staticmethod
     def _load(path: Path):
-        """(inode, entrée), sans rien supprimer : entrée None si absente, _CORRUPT si illisible,
-        _STALE si expirée, sinon (expiration, texte)."""
+        """(inode, entrée), sans rien supprimer : entrée None si absente, _CORRUPT si le contenu
+        est invalide, _STALE si expirée, sinon (expiration, texte). Une erreur de lecture (droits,
+        disque) remonte : le fichier n'est pas corrompu, il ne doit pas être supprimé."""
         inode = None
         try:
             with open(path) as f:
@@ -381,7 +382,7 @@ class FileStore(Store):
                 raise TypeError("format inattendu")
         except FileNotFoundError:
             return None, None
-        except (OSError, ValueError, KeyError, TypeError):
+        except (ValueError, KeyError, TypeError):
             return inode, _CORRUPT
         if expires is not None and expires <= time.time():
             return inode, _STALE
@@ -493,16 +494,24 @@ class FileStore(Store):
         for path in self.directory.iterdir():
             if not (CACHE_FILE.fullmatch(path.name) and path.is_file()):
                 continue
-            if self._load(path)[1] not in (_STALE, _CORRUPT):
+            if self._load_or_warn(path)[1] not in (_STALE, _CORRUPT):
                 continue
             # Verrou par fichier, jamais sur tout le parcours : un gros dossier ne doit pas
             # bloquer les requêtes limitées. On relit sous le verrou : une écriture a pu passer.
             with self._locked():
-                inode, entry = self._load(path)
+                inode, entry = self._load_or_warn(path)
                 if entry is _STALE or entry is _CORRUPT:
                     self._unlink_if_same(path, inode)
                     count += 1
         return count
+
+    def _load_or_warn(self, path: Path):
+        """_load pour prune : un fichier illisible est laissé en place, sans bloquer la purge."""
+        try:
+            return self._load(path)
+        except OSError as exc:
+            logger.warning("Cache : %s illisible, laissé en place (%s).", path.name, exc)
+            return None, None
 
 
 @cache
