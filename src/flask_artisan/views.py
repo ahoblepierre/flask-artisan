@@ -7,6 +7,7 @@ Les erreurs et saisies d'une validation HTML échouée sont flashées en session
 import secrets
 
 from flask import has_request_context, request, session
+from flask.globals import request_ctx
 from markupsafe import Markup, escape
 
 FLASH_KEYS = {"_flash_errors": "errors", "_flash_old": "old"}
@@ -41,17 +42,31 @@ def _flashed() -> dict:
     return request.environ.get("flask_artisan.flash", {}) if has_request_context() else {}
 
 
+def _session_accessed() -> bool | None:
+    """`accessed` de la session, lu sans le modifier ; None si Flask ne l'expose plus ainsi.
+
+    Le proxy `session` et la propriété `RequestContext.session` (Flask 3.1) le mettent à True :
+    on lit l'attribut d'instance, privé en 3.1 (`_session`), public en 3.0 (`session`).
+    """
+    attrs = vars(request_ctx._get_current_object())
+    store = attrs.get("_session", attrs.get("session"))
+    return getattr(store, "accessed", None)
+
+
 def age_flash() -> None:
     """before_request : données flashées par la requête précédente, retirées de la session."""
+    accessed_before = _session_accessed()
     store = session._get_current_object()
     # Pas de pop sans la clé : une requête d'API ne doit pas recevoir de cookie.
     data = {name: store.pop(key) for key, name in FLASH_KEYS.items() if key in store}
     if data:
         request.environ["flask_artisan.flash"] = data
-    else:
-        # Premier before_request de l'app : rien n'avait lu la session avant nous. Sans ça,
-        # chaque réponse recevrait `Vary: Cookie`, alors que la requête n'a rien lu.
-        store.accessed = False
+    elif accessed_before is not None:
+        # On annule notre propre lecture, pas celle d'un url_value_preprocessor, d'un
+        # convertisseur ou de request_started, qui passent avant nous : sinon une réponse
+        # dépendant de la session sortirait sans `Vary: Cookie`. Attribut introuvable : on
+        # ne touche à rien (un `Vary: Cookie` de trop, jamais un de moins).
+        store.accessed = accessed_before
 
 
 def errors() -> ErrorBag:
