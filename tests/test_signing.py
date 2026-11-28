@@ -128,3 +128,16 @@ def test_lowercase_encoded_question_mark_is_forbidden(named_app):
 def test_value_with_question_mark_cannot_be_signed(named_app, external):
     with named_app.test_request_context(), pytest.raises(ValueError, match="'s'"):
         signed_url("s", name="a?b", _external=external)
+
+
+def test_query_moved_into_path_route_is_forbidden(routed_app):
+    app = routed_app(
+        lambda: (
+            Route.get("/p/<path:rest>", lambda rest: rest).name("p").middleware(ValidateSignature)
+        )
+    )
+    with app.test_request_context():
+        url = signed_url("p", expires=60, rest="a/b/c")
+    client = app.test_client()
+    client.get(url).assert_ok()
+    assert client.get(_moved_query(url)).status_code == 403

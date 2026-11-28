@@ -19,8 +19,13 @@ def _sign(message: str) -> str:
     return hmac.new(key, message.encode(), hashlib.sha256).hexdigest()
 
 
-def _canonical(relative: str) -> str:
-    """Chemin décodé, sans le préfixe de montage (SCRIPT_NAME), puis la requête telle quelle.
+def _message(path: str, query: str) -> str:
+    """Message signé : sans « ? » dans le chemin, le premier « ? » sépare sans ambiguïté."""
+    return path + (f"?{query}" if query else "")
+
+
+def _canonical(relative: str) -> tuple[str, str]:
+    """Chemin décodé, sans le préfixe de montage (SCRIPT_NAME), et la requête telle quelle.
 
     C'est la forme que la vérification relit : `request.path` est décodé et sans préfixe.
     """
@@ -29,7 +34,7 @@ def _canonical(relative: str) -> str:
     path = unquote(parts.path)
     if root and path.startswith(root):
         path = path[len(root) :]
-    return path + (f"?{parts.query}" if parts.query else "")
+    return path, parts.query
 
 
 def signed_url(endpoint: str, expires: int | None = None, **values) -> str:
@@ -41,12 +46,13 @@ def signed_url(endpoint: str, expires: int | None = None, **values) -> str:
     if expires is not None:
         values["expires"] = int(_now()) + expires
     relative = url_for(endpoint, **values)
-    if "?" in unquote(urlsplit(relative).path):
+    path, query = _canonical(relative)
+    if "?" in path:
         raise ValueError(
             f"signed_url('{endpoint}') : une valeur de route contient « ? », "
             "impossible à signer sans ambiguïté."
         )
-    signature = _sign(_canonical(relative))
+    signature = _sign(_message(path, query))
     if external:
         # Même chemin, même ordre des paramètres : signature ajoutée en dernier.
         return url_for(endpoint, **values, signature=signature, _external=True)
@@ -62,7 +68,7 @@ def has_valid_signature(req) -> bool:
     if len(signatures) != 1 or params[-1] != signatures[0]:
         return False
     rest = params[:-1]
-    message = req.path + ("?" + "&".join(rest) if rest else "")
+    message = _message(req.path, "&".join(rest))
     if not hmac.compare_digest(signatures[0].removeprefix("signature="), _sign(message)):
         return False
     for param in rest:
